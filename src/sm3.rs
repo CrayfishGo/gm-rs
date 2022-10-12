@@ -1,6 +1,4 @@
-use std::error::Error;
 use std::fmt::{Display, Formatter};
-use std::iter::zip;
 
 pub enum Sm3Error {
     ErrorMsgLen,
@@ -50,7 +48,7 @@ fn p1(x: u32) -> u32 {
 }
 
 fn ff(x: u32, y: u32, z: u32, j: u32) -> u32 {
-    if j >= 0 && j <= 15 {
+    if j <= 15 {
         return x ^ y ^ z;
     } else if j >= 16 && j <= 63 {
         return (x & y) | (x & z) | (y & z);
@@ -59,7 +57,7 @@ fn ff(x: u32, y: u32, z: u32, j: u32) -> u32 {
 }
 
 fn gg(x: u32, y: u32, z: u32, j: u32) -> u32 {
-    if j >= 0 && j <= 15 {
+    if j <= 15 {
         return x ^ y ^ z;
     } else if j >= 16 && j <= 63 {
         return (x & y) | (!x & z);
@@ -68,7 +66,7 @@ fn gg(x: u32, y: u32, z: u32, j: u32) -> u32 {
 }
 
 fn t(j: usize) -> u32 {
-    if j >= 0 && j <= 15 {
+    if j <= 15 {
         return T00;
     } else if j >= 16 && j <= 63 {
         return T16;

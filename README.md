@@ -7,7 +7,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-gm-rs = "0.1.0"
+gm-rs = "0.2.1"
 ```
 
 ## Example
