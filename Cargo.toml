@@ -3,7 +3,14 @@ name = "gm-rs"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+description = "A Rust Implementation of China's Standards of Encryption Algorithms(SM2/SM3/SM4)"
+authors = ["evanyang1120@163.com"]
+homepage = "https://github.com/CrayfishGo/gm-rs.git"
+license = "MIT"
+keywords = ["sm2", "sm3", "sm4"]
+categories = ["cryptography", "cipher"]
+readme = "README.md"
+documentation = "https://docs.rs/gm-rs/"
 
 [dependencies]
 hex = "0.4"
