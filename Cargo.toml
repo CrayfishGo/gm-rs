@@ -8,7 +8,7 @@ authors = ["evanyang1120@163.com"]
 homepage = "https://github.com/CrayfishGo/gm-rs.git"
 license = "MIT"
 keywords = ["sm2", "sm3", "sm4"]
-categories = ["cryptography", "cipher"]
+categories = ["cryptography"]
 readme = "README.md"
 documentation = "https://docs.rs/gm-rs/"
 
