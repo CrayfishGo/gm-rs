@@ -1,4 +1,5 @@
 pub mod sm3;
+pub mod sm2;
 
 /// This Rust crate can be used to interact with the Google Authenticator mobile app for 2-factor-authentication.
 /// This Rust crates can generate secrets, generate codes, validate codes and present a QR-Code for scanning the secret.

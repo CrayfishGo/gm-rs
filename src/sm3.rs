@@ -2,22 +2,6 @@ use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::iter::zip;
 
-
-/// This Rust crate can be used to interact with the Google Authenticator mobile app for 2-factor-authentication.
-/// This Rust crates can generate secrets, generate codes, validate codes and present a QR-Code for scanning the secret.
-/// It implements TOTP according to RFC6238
-/// # Example
-/// ```rust
-/// use crate::gm_rs::sm3::sm3_hash;
-/// fn main(){
-///     let hash = sm3_hash(b"abc");
-///     let r = hex::encode(hash.as_ref().unwrap());
-///     assert_eq!("66c7f0f462eeedd9d1f2d46bdc10e4e24167c4875cf2f7a2297da02b8f4ba8e0", r);
-/// }
-///
-/// ```
-///
-
 pub enum Sm3Error {
     ErrorMsgLen,
 }
@@ -51,7 +35,6 @@ pub(crate) const T00: u32 = 0x79cc4519;
 // 16 ≤ j ≤ 63
 pub(crate) const T16: u32 = 0x7a879d8a;
 
-
 pub(crate) static IV: [u32; 8] = [
     0x7380166f, 0x4914b2b9, 0x172442d7, 0xda8a0600, 0xa96f30bc, 0x163138aa, 0xe38dee4d, 0xb0fb0e4e,
 ];
@@ -65,7 +48,6 @@ fn p0(x: u32) -> u32 {
 fn p1(x: u32) -> u32 {
     x ^ x.rotate_left(15) ^ x.rotate_left(23)
 }
-
 
 fn ff(x: u32, y: u32, z: u32, j: u32) -> u32 {
     if j >= 0 && j <= 15 {
@@ -94,6 +76,17 @@ fn t(j: usize) -> u32 {
     0
 }
 
+/// # Example
+/// ```rust
+/// use crate::gm_rs::sm3::sm3_hash;
+/// fn main(){
+///     let hash = sm3_hash(b"abc");
+///     let r = hex::encode(hash.as_ref().unwrap());
+///     assert_eq!("66c7f0f462eeedd9d1f2d46bdc10e4e24167c4875cf2f7a2297da02b8f4ba8e0", r);
+/// }
+///
+/// ```
+///
 pub fn sm3_hash(msg: &[u8]) -> Result<Vec<u8>, Sm3Error> {
     let msg = pad(msg)?;
     let len = msg.len();
@@ -135,7 +128,9 @@ fn cf(v_i: &mut [u32; 8], b_i: [u8; 64]) {
     // b. Wj ← P1(Wj−16 ⊕ Wj−9 ⊕ (Wj−3 ≪ 15)) ⊕ (Wj−13 ≪ 7) ⊕ Wj−6
     j = 16;
     while j <= 67 {
-        w[j] = p1(w[j - 16] ^ w[j - 9] ^ w[j - 3].rotate_left(15)) ^ w[j - 13].rotate_left(7) ^ w[j - 6];
+        w[j] = p1(w[j - 16] ^ w[j - 9] ^ w[j - 3].rotate_left(15))
+            ^ w[j - 13].rotate_left(7)
+            ^ w[j - 6];
         j += 1;
     }
 
@@ -156,10 +151,20 @@ fn cf(v_i: &mut [u32; 8], b_i: [u8; 64]) {
     let mut h = v_i[7];
 
     for j in 0..64 {
-        let ss1 = (a.rotate_left(12).wrapping_add(e).wrapping_add(t(j).rotate_left(j as u32))).rotate_left(7);
+        let ss1 = (a
+            .rotate_left(12)
+            .wrapping_add(e)
+            .wrapping_add(t(j).rotate_left(j as u32)))
+        .rotate_left(7);
         let ss2 = ss1 ^ (a.rotate_left(12));
-        let tt1 = ff(a, b, c, j as u32).wrapping_add(d).wrapping_add(ss2).wrapping_add(w1[j]);
-        let tt2 = gg(e, f, g, j as u32).wrapping_add(h).wrapping_add(ss1).wrapping_add(w[j]);
+        let tt1 = ff(a, b, c, j as u32)
+            .wrapping_add(d)
+            .wrapping_add(ss2)
+            .wrapping_add(w1[j]);
+        let tt2 = gg(e, f, g, j as u32)
+            .wrapping_add(h)
+            .wrapping_add(ss1)
+            .wrapping_add(w[j]);
         d = c;
         c = b.rotate_left(9);
         b = a;
@@ -178,7 +183,6 @@ fn cf(v_i: &mut [u32; 8], b_i: [u8; 64]) {
     v_i[6] ^= g;
     v_i[7] ^= h;
 }
-
 
 fn pad(msg: &[u8]) -> Result<Vec<u8>, Sm3Error> {
     let bit_length = (msg.len() << 3) as u64;
@@ -201,4 +205,3 @@ fn pad(msg: &[u8]) -> Result<Vec<u8>, Sm3Error> {
     }
     Ok(msg)
 }
-
