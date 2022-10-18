@@ -12,5 +12,14 @@ categories = ["cryptography"]
 readme = "README.md"
 documentation = "https://docs.rs/gm-rs/"
 
+
 [dependencies]
 hex = "0.4"
+byteorder = "1.0.0"
+num-traits = "0.2.14"
+num-bigint = "0.4.3"
+num-integer = "0.1.44"
+rand = "0.8.4"
+pem = "1.0.2"
+lazy_static = "1.4.0"
+base64 = "0.13.0"
