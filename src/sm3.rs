@@ -79,14 +79,14 @@ fn t(j: usize) -> u32 {
 /// use crate::gm_rs::sm3::sm3_hash;
 /// fn main(){
 ///     let hash = sm3_hash(b"abc");
-///     let r = hex::encode(hash.as_ref().unwrap());
+///     let r = hex::encode(hash);
 ///     assert_eq!("66c7f0f462eeedd9d1f2d46bdc10e4e24167c4875cf2f7a2297da02b8f4ba8e0", r);
 /// }
 ///
 /// ```
 ///
-pub fn sm3_hash(msg: &[u8]) -> Result<Vec<u8>, Sm3Error> {
-    let msg = pad(msg)?;
+pub fn sm3_hash(msg: &[u8]) -> [u8; 32] {
+    let msg = pad(msg).unwrap();
     let len = msg.len();
     let mut b_i: [u8; 64] = [0; 64];
     let mut count_group: usize = 0;
@@ -105,7 +105,7 @@ pub fn sm3_hash(msg: &[u8]) -> Result<Vec<u8>, Sm3Error> {
         output[i * 4 + 2] = (v_i[i] >> 8) as u8;
         output[i * 4 + 3] = v_i[i] as u8;
     }
-    Ok(output.to_vec())
+    output
 }
 
 fn cf(v_i: &mut [u32; 8], b_i: [u8; 64]) {

@@ -1,5 +1,21 @@
 #![allow(unused_macros)]
 
+
+#[macro_export]
+macro_rules! format_hex {
+    ($a: expr) => {
+        format!("{:0width$x}", $a, width = 64)
+    };
+
+    ($a: expr, $b: expr) => {
+        format!("{:0width$x}{:0width$x}", $a, $b, width = 64)
+    };
+
+    ($a: expr, $($b: tt)*) => {
+        format!("{:0width$x}{}", $a, format_hex!($($b)*), width = 64)
+    }
+}
+
 #[macro_export]
 macro_rules! forward_val_val_binop {
     (impl $imp:ident for $res:ty, $method:ident) => {
