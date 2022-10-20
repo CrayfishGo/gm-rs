@@ -12,6 +12,7 @@ pub mod key;
 mod macros;
 pub mod p256_ecc;
 pub mod p256_field;
+pub mod signature;
 
 pub(crate) fn random_uint() -> BigUint {
     let n: &FieldElement = &P256C_PARAMS.n;
@@ -137,10 +138,10 @@ pub fn quick_pow(a: &BigUint, n: &BigUint) -> BigUint {
     ans
 }
 
-
 #[cfg(test)]
 mod test {
     use crate::sm2::key::{gen_keypair, CompressModle};
+    use crate::sm2::signature;
 
     #[test]
     fn test_gen_keypair() {
@@ -155,5 +156,19 @@ mod test {
         let plain = sk.decrypt(&encrypt).unwrap();
         assert_eq!(msg, plain)
     }
-}
 
+    #[test]
+    fn test_sign() {
+        let (pk, sk) = gen_keypair(CompressModle::Compressed).unwrap();
+        signature::sign(None, b"hello", &sk.d, &pk).unwrap();
+    }
+
+    #[test]
+    fn test_sign_verify() {
+        let msg = b"hello";
+        let (pk, sk) = gen_keypair(CompressModle::Compressed).unwrap();
+        let signature = signature::sign(None, msg, &sk.d, &pk).unwrap();
+        let r = signature.verify(None, msg, &pk).unwrap();
+        println!("test_sign_verify = {}", r)
+    }
+}

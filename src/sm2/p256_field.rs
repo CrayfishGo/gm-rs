@@ -17,16 +17,17 @@ use crate::{
     forward_ref_ref_binop, forward_ref_val_binop, forward_val_ref_binop, forward_val_val_binop,
 };
 
-/// Fp 的加法，减法，乘法并不是简单的四则运算。其运算结果的值必须在Fp的有限域中，这样保证椭圆曲线变成离散的点
+/// 素域Fp的域元素
 ///
 /// 这里我们规定一个有限域Fp
 ///
 /// * 取大质数p，则有限域中有p-1个有限元：0，1，2...p-1
-/// * Fp上的加法为模p加法`a+b≡c(mod p)`
-/// * Fp上的乘法为模p乘法`a×b≡c(mod p)`
-/// * Fp上的减法为模p减法`a-b≡c(mod p)`
+/// * 域元素的加法是整数的模p加法，即若a,b ∈ Fp，则a+b = (a+b) mod p；
+/// * 域元素的乘法是整数的模p乘法，即若a,b ∈ Fp，则a · b = (a · b) mod p
+/// * 域元素的减法是整数的模p减法，即若a,b ∈ Fp，则a - b = (a - b) mod p
 /// * Fp上的除法就是乘除数的乘法逆元`a÷b≡c(mod p)`，即 `a×b^(-1)≡c (mod p)`
-/// * Fp的乘法单位元为1，零元为0
+/// * Fp的乘法单位元是整数1
+/// * Fp的加法单位元是整数0
 /// * Fp域上满足交换律，结合律，分配律
 pub struct FieldElement {
     inner: BigUint,
@@ -101,6 +102,13 @@ impl FieldElement {
 
     pub fn is_zero(&self) -> bool {
         self.inner.is_zero()
+    }
+
+    pub fn square(&self) -> FieldElement {
+        let rns = self.inner.pow(2);
+        FieldElement {
+            inner: rns % &P256C_PARAMS.p.inner,
+        }
     }
 
     pub fn modpow(&self, exponent: &BigUint, modulus: &Self) -> Self {

@@ -7,24 +7,29 @@ use crate::sm3::sm3_hash;
 
 #[derive(Debug, Clone)]
 pub struct Sm2PublicKey {
-    p: Point,
+    value: Point,
     compress_modle: CompressModle,
 }
 
 impl Sm2PublicKey {
+
+    pub fn is_valid(&self) -> bool{
+        self.value.is_valid()
+    }
+
     pub fn encrypt(&self, msg: &[u8]) -> Sm2Result<Vec<u8>> {
         loop {
             let klen = msg.len();
             let k = random_uint();
-            let c1_p = p256_ecc::base_mul_point(&k, &P256C_PARAMS.g_point);
+            let c1_p = p256_ecc::scalar_mul(&k, &P256C_PARAMS.g_point);
             let c1_p = c1_p.to_affine(); // 根据加密算法，z坐标会被丢弃，为保证解密还原回来的坐标在曲线上，则必须转换坐标系到 affine 坐标系
 
-            let s_p = p256_ecc::base_mul_point(P256C_PARAMS.h.inner(), &self.p);
+            let s_p = p256_ecc::scalar_mul(P256C_PARAMS.h.inner(), &self.value);
             if s_p.is_zero() {
                 return Err(Sm2Error::ZeroPoint);
             }
 
-            let c2_p = p256_ecc::base_mul_point(&k, &self.p).to_affine();
+            let c2_p = p256_ecc::scalar_mul(&k, &self.value).to_affine();
             let x2_bytes = c2_p.x.inner().to_bytes_be();
             let y2_bytes = c2_p.y.inner().to_bytes_be();
             let mut c2_append = vec![];
@@ -57,14 +62,17 @@ impl Sm2PublicKey {
     }
 
     pub fn to_str_hex(&self) -> String {
-        format!("{}{}", self.p.x.to_str_radix(16), self.p.y.to_str_radix(16))
+        format!("{}{}", self.value.x.to_str_radix(16), self.value.y.to_str_radix(16))
+    }
+    pub fn value(&self) -> &Point {
+        &self.value
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct Sm2PrivateKey {
-    d: BigUint,
-    compress_modle: CompressModle,
+    pub(crate) d: BigUint,
+    pub(crate) compress_modle: CompressModle,
 }
 
 impl Sm2PrivateKey {
@@ -84,12 +92,12 @@ impl Sm2PrivateKey {
             return Err(Sm2Error::CheckPointErr);
         }
 
-        let s_point = p256_ecc::base_mul_point(P256C_PARAMS.h.inner(), &c1_point);
+        let s_point = p256_ecc::scalar_mul(P256C_PARAMS.h.inner(), &c1_point);
         if s_point.is_zero() {
             return Err(Sm2Error::ZeroPoint);
         }
 
-        let c2_point = p256_ecc::base_mul_point(&self.d, &c1_point).to_affine();
+        let c2_point = p256_ecc::scalar_mul(&self.d, &c1_point).to_affine();
         let x2_bytes = c2_point.x.inner().to_bytes_be();
         let y2_bytes = c2_point.y.inner().to_bytes_be();
         let mut prepend: Vec<u8> = vec![];
@@ -141,9 +149,9 @@ fn public_from_private(
     sk: &Sm2PrivateKey,
     compress_modle: CompressModle,
 ) -> Sm2Result<Sm2PublicKey> {
-    let p = p256_ecc::base_mul_point(&sk.d, &P256C_PARAMS.g_point);
+    let p = p256_ecc::scalar_mul(&sk.d, &P256C_PARAMS.g_point);
     if p.is_valid() {
-        Ok(Sm2PublicKey { p, compress_modle })
+        Ok(Sm2PublicKey { value: p, compress_modle })
     } else {
         Err(Sm2Error::InvalidPublic)
     }

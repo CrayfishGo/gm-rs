@@ -1,28 +1,58 @@
 use lazy_static::lazy_static;
 use num_bigint::BigUint;
-use num_traits::{FromPrimitive, One};
+use num_traits::FromPrimitive;
 
 use crate::sm2::error::{Sm2Error, Sm2Result};
 use crate::sm2::key::CompressModle;
 use crate::sm2::p256_field::{from_biguint, FieldElement};
 
 lazy_static! {
-    pub static ref P256C_PARAMS: CurveParameters = CurveParameters::new();
+    pub static ref P256C_PARAMS: CurveParameters = CurveParameters::new_default();
 }
 
 /// ecc equation: y^2 == x^3 +ax + b (mod p)
 #[derive(Debug, Clone)]
 pub struct CurveParameters {
-    pub(crate) p: FieldElement,
-    pub(crate) n: FieldElement,
-    pub(crate) a: FieldElement,
-    pub(crate) b: FieldElement,
-    pub(crate) h: FieldElement,
-    pub(crate) g_point: Point,
+    /// p：大于3的素数
+    pub p: FieldElement,
+
+    /// n：基点G的阶(n是#E(Fq)的素因子)
+    pub n: FieldElement,
+
+    /// a：Fq中的元素，它们定义Fq上的一条椭圆曲线E
+    pub a: FieldElement,
+
+    /// b：Fq中的元素，它们定义Fq上的一条椭圆曲线E
+    pub b: FieldElement,
+
+    /// The Cofactor, the recommended value is 1
+    /// 余因子，h = #E(Fq)/n，其中n是基点G的阶
+    pub h: FieldElement,
+
+    /// G：椭圆曲线的一个基点，其阶为素数
+    pub g_point: Point,
+}
+
+impl Default for CurveParameters {
+    fn default() -> Self {
+        CurveParameters::new_default()
+    }
 }
 
 impl CurveParameters {
-    pub fn new() -> CurveParameters {
+    /// 生成椭圆曲线参数
+    ///
+    pub fn generate() -> Self {
+        unimplemented!()
+    }
+
+    /// 验证椭圆曲线参数
+    ///
+    pub fn verify(&self) -> bool {
+        unimplemented!()
+    }
+
+    pub fn new_default() -> CurveParameters {
         let p = FieldElement::from_str_radix(
             "FFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00000000FFFFFFFFFFFFFFFF",
             16,
@@ -55,19 +85,17 @@ impl CurveParameters {
         )
         .unwrap();
 
-        let g_point = Point {
-            x: g_x,
-            y: g_y,
-            z: FieldElement::one(),
-        };
-
         let ctx = CurveParameters {
             p,
             n,
             a,
             b,
-            h: FieldElement::from_u32(1),
-            g_point,
+            h: FieldElement::from_u32(1), // The Cofactor, the recommended value is 1
+            g_point: Point {
+                x: g_x,
+                y: g_y,
+                z: FieldElement::one(),
+            },
         };
         ctx
     }
@@ -189,7 +217,8 @@ impl Point {
             let ecc_p = &P256C_PARAMS.p;
             let yy = &self.y * &self.y;
             let xxx = &self.x * &self.x * &self.x;
-            let axz = &P256C_PARAMS.a * &self.x * &self.z.modpow(&BigUint::from_u32(4).unwrap(), ecc_p);
+            let axz =
+                &P256C_PARAMS.a * &self.x * &self.z.modpow(&BigUint::from_u32(4).unwrap(), ecc_p);
             let bz = &P256C_PARAMS.b * &self.z.modpow(&BigUint::from_u32(6).unwrap(), ecc_p);
             let exp = &xxx + &axz + &bz;
             yy.eq(&exp)
@@ -224,19 +253,41 @@ impl Point {
 
     /// see GMT 0003.1-2012
     ///
-    /// A.1.2.3.2  Jacobian 加重射影坐标
+    /// The "dbl-2007-bl" doubling formulas
+    ///
+    /// Cost: 1M + 8S + 1*a + 10add + 2*2 + 1*3 + 1*8.
+    //       XX = X12
+    //       YY = Y12
+    //       YYYY = YY2
+    //       ZZ = Z12
+    //       S = 2*((X1+YY)2-XX-YYYY)
+    //       M = 3*XX+a*ZZ2
+    //       T = M2-2*S
+    //       X3 = T
+    //       Y3 = M*(S-T)-8*YYYY
+    //       Z3 = (Y1+Z1)2-YY-ZZ
     pub fn double(&self) -> Point {
         let ecc_a = &P256C_PARAMS.a;
         let (x1, y1, z1) = (&self.x, &self.y, &self.z);
-        let yy = y1 * y1;
-        let xx = x1 * x1;
-        let zz = z1 * z1;
-        let lambda1 = &xx * 3u32 + ecc_a * (&zz * &zz);
-        let lambda2 = x1 * 4u32 * &yy;
-        let lambda3 = &yy * &yy * 8u32;
-        let x3 = &lambda1 * &lambda1 - &lambda2 * 2u32;
-        let y3 = &lambda1 * (&lambda2 - &x3) - &lambda3;
-        let z3 = y1 * 2u32 * z1;
+        let xx = x1.square();
+        let yy = y1.square();
+        let zz = z1.square();
+
+        let yyyy = &yy.square();
+        let s = ((x1 + &yy).square() - &xx - yyyy) * 2u32;
+        let m = &xx * 3u32 + ecc_a * &zz.square();
+        let t = &m.square() - &s * 2u32;
+        let y3 = &m * (&s - &t) - yyyy * 8u32;
+        let x3 = t;
+        let z3 = (y1 + z1).square() - &yy - &zz;
+
+        // let lambda1 = &xx * 3u32 + ecc_a * (&zz * &zz);
+        // let lambda2 = x1 * 4u32 * &yy;
+        // let lambda3 = &yy * &yy * 8u32;
+        // let x3 = &lambda1 * &lambda1 - &lambda2 * 2u32;
+        // let y3 = &lambda1 * (&lambda2 - &x3) - &lambda3;
+        // let z3 = y1 * 2u32 * z1;
+
         let p = Point {
             x: x3,
             y: y3,
@@ -248,6 +299,23 @@ impl Point {
     /// see GMT 0003.1-2012
     ///
     /// A.1.2.3.2  Jacobian 加重射影坐标
+    /// The "add-2007-bl" addition formulas
+    ///
+    /// Cost: 11M + 5S + 9add + 4*2.
+    //       Z1Z1 = Z12
+    //       Z2Z2 = Z22
+    //       U1 = X1*Z2Z2
+    //       U2 = X2*Z1Z1
+    //       S1 = Y1*Z2*Z2Z2
+    //       S2 = Y2*Z1*Z1Z1
+    //       H = U2-U1
+    //       I = (2*H)2
+    //       J = H*I
+    //       r = 2*(S2-S1)
+    //       V = U1*I
+    //       X3 = r2-J-2*V
+    //       Y3 = r*(V-X3)-2*S1*J
+    //       Z3 = ((Z1+Z2)2-Z1Z1-Z2Z2)*H
     pub fn add(&self, p2: &Point) -> Point {
         // 0 + p2 = p2
         if self.is_zero() {
@@ -268,38 +336,29 @@ impl Point {
         if x1 == x2 && y1 == y2 && z1 == z2 {
             return self.double();
         } else {
-            let z1z1 = z1 * z1;
-            let z2z2 = z2 * z2;
+            let z1z1 = z1.square();
+            let z2z2 = z2.square();
             let u1 = x1 * &z2z2;
             let u2 = x2 * &z1z1;
             let s1 = y1 * z2 * &z2z2;
             let s2 = y2 * z1 * &z1z1;
             let h = &u2 - &u1;
-            let r = &s2 - &s1;
-            let hh = &h * &h;
-            let hhh = &h * &hh;
-            let v = &u1 * &hh;
-            let x3 = &r * &r - &hhh - &v * 2u32;
-            let y3 = &r * (&v - &x3) - &s1 * &hhh;
-            let z3 = z1 * z2 * &h;
 
-            // let two = &FieldElement::from_u32(2);
-            // let three = &FieldElement::from_u32(3);
-            // let z1z1 = z1 * z1;
-            // let z2z2 = z2 * z2;
-            // let lambda1 = x1 * &z2z2;
-            // let lambda2 = x2 * &z1z1;
-            // let lambda3 = &lambda1 - &lambda2;
-            // let lambda4 = y1 * &z2.modpow(three, ecc_p);
-            // let lambda5 = y2 * &z1.modpow(three, ecc_p);
-            // let lambda6 = &lambda4 - &lambda5;
-            // let lambda7 = &lambda1 + &lambda2;
-            // let lambda8 = &lambda4 + &lambda5;
-            // let x3 = &lambda6.modpow(two, ecc_p) - &lambda7 * &lambda3.modpow(two, ecc_p);
-            // let lambda9 = &lambda7 * &lambda3.modpow(two, ecc_p) - &x3 * 2u32;
-            // let y3 = (&lambda9 * &lambda6 - &lambda8 * &lambda3.modpow(three, ecc_p))
-            //     * FieldElement::from_u32(2).modinv();
-            // let z3 = z1 * z2 * &lambda3;
+            let i = (&h * 2u32).square();
+            let j = &h * &i;
+            let r = (&s2 - &s1) * 2u32;
+            let v = &u1 * &i;
+            let x3 = &r.square() - &j - &v * 2u32;
+            let y3 = &r * (&v - &x3) - &s1 * &j * 2u32;
+            let z3 = &h * ((z1 + z2).square() - &z1z1 - z2z2);
+
+            // let r = &s2 - &s1;
+            // let hh = &h * &h;
+            // let hhh = &h * &hh;
+            // let v = &u1 * &hh;
+            // let x3 = &r * &r - &hhh - &v * 2u32;
+            // let y3 = &r * (&v - &x3) - &s1 * &hhh;
+            // let z3 = z1 * z2 * &h;
 
             let p = Point {
                 x: x3,
@@ -313,16 +372,13 @@ impl Point {
 
 //
 // P = [k]G
-pub fn base_mul_point(m: &BigUint, p: &Point) -> Point {
-    let m = m % P256C_PARAMS.n.inner();
-    if m.is_one() {
-        mul_naf(&m, p)
-    } else {
-        mul_binary(&m, p)
-    }
+pub fn scalar_mul(m: &BigUint, p: &Point) -> Point {
+    // let m = m % P256C_PARAMS.n.inner();
+    mul_naf(&m, p)
 }
 
 // 二进制展开法
+// todo fix 会导致签名验证失败 -- 待修复
 pub fn mul_binary(m: &BigUint, p: &Point) -> Point {
     let mut q = Point::zero();
     let k = m.to_bytes_be();
@@ -337,38 +393,39 @@ pub fn mul_binary(m: &BigUint, p: &Point) -> Point {
     q
 }
 
-// 滑动窗口法
+// 滑动窗法
 pub fn mul_naf(m: &BigUint, p: &Point) -> Point {
     let k = from_biguint(&m);
-    let mut i = 256;
-    let mut q = Point::zero();
-    let naf = w_naf(&k, 5, &mut i);
-    let offset = 16;
+    let mut l = 256;
+    let naf = w_naf(&k, 5, &mut l);
+
+    // 预处理计算
+    let p1 = p.clone();
+    let p2 = p.double();
     let mut table = vec![];
     for _ in 0..32 {
         table.push(Point::zero());
     }
-
-    let double_p = p.double();
-
-    table[1 + offset] = p.clone();
+    let offset = 16;
+    table[1 + offset] = p1;
     table[offset - 1] = table[1 + offset].neg();
     for i in 1..8 {
-        table[2 * i + offset + 1] = double_p.add(&table[2 * i + offset - 1]);
+        table[2 * i + offset + 1] = p2.add(&table[2 * i + offset - 1]);
         table[offset - 2 * i - 1] = table[2 * i + offset + 1].neg();
     }
 
+    // 主循环
+    let mut q = Point::zero();
     loop {
         q = q.double();
-        if naf[i] != 0 {
-            let index = (naf[i] + 16) as usize;
+        if naf[l] != 0 {
+            let index = (naf[l] + 16) as usize;
             q = q.add(&table[index]);
         }
-
-        if i == 0 {
+        if l == 0 {
             break;
         }
-        i -= 1;
+        l -= 1;
     }
     q
 }
