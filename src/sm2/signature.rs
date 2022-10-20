@@ -66,7 +66,7 @@ fn sign_raw(digest: &[u8], sk: &BigUint) -> Sm2Result<Signature> {
         return Err(Sm2Error::InvalidDigestLen);
     }
     let e = BigUint::from_bytes_be(digest);
-    let n = P256C_PARAMS.n.inner();
+    let n = &P256C_PARAMS.n;
     loop {
         let k = random_uint();
         let p_x = p256_ecc::scalar_mul(&k, &P256C_PARAMS.g_point).to_affine();
@@ -97,7 +97,7 @@ pub fn inv_n(x: &BigUint) -> Sm2Result<BigUint> {
     if *x == BigUint::zero() {
         return Err(Sm2Error::ZeroDivisor);
     }
-    let n = P256C_PARAMS.n.inner();
+    let n = &P256C_PARAMS.n;
     let mut ru = x.clone();
     let mut rv = n.clone();
     let mut ra = BigUint::one();
@@ -164,7 +164,7 @@ impl Signature {
         if digest.len() != 32 {
             return Err(Sm2Error::InvalidDigestLen);
         }
-        let n = P256C_PARAMS.n.inner();
+        let n = &P256C_PARAMS.n;
         let e = BigUint::from_bytes_be(digest);
         let r = &self.r;
         let s = &self.s;

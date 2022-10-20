@@ -1,10 +1,10 @@
 use lazy_static::lazy_static;
 use num_bigint::BigUint;
-use num_traits::FromPrimitive;
+use num_traits::{FromPrimitive, Num, One};
 
 use crate::sm2::error::{Sm2Error, Sm2Result};
 use crate::sm2::key::CompressModle;
-use crate::sm2::p256_field::{from_biguint, FieldElement};
+use crate::sm2::p256_field::FieldElement;
 
 lazy_static! {
     pub static ref P256C_PARAMS: CurveParameters = CurveParameters::new_default();
@@ -17,7 +17,7 @@ pub struct CurveParameters {
     pub p: FieldElement,
 
     /// n：基点G的阶(n是#E(Fq)的素因子)
-    pub n: FieldElement,
+    pub n: BigUint,
 
     /// a：Fq中的元素，它们定义Fq上的一条椭圆曲线E
     pub a: FieldElement,
@@ -27,7 +27,7 @@ pub struct CurveParameters {
 
     /// The Cofactor, the recommended value is 1
     /// 余因子，h = #E(Fq)/n，其中n是基点G的阶
-    pub h: FieldElement,
+    pub h: BigUint,
 
     /// G：椭圆曲线的一个基点，其阶为素数
     pub g_point: Point,
@@ -53,44 +53,69 @@ impl CurveParameters {
     }
 
     pub fn new_default() -> CurveParameters {
-        let p = FieldElement::from_str_radix(
-            "FFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00000000FFFFFFFFFFFFFFFF",
-            16,
-        )
-        .unwrap();
-        let n = FieldElement::from_str_radix(
+        let p = FieldElement::new([
+            0xffff_fffe,
+            0xffff_ffff,
+            0xffff_ffff,
+            0xffff_ffff,
+            0xffff_ffff,
+            0x0000_0000,
+            0xffff_ffff,
+            0xffff_ffff,
+        ]);
+        let n = BigUint::from_str_radix(
             "FFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFF7203DF6B21C6052B53BBF40939D54123",
             16,
         )
         .unwrap();
-        let a = FieldElement::from_str_radix(
-            "FFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00000000FFFFFFFFFFFFFFFC",
-            16,
-        )
-        .unwrap();
-        let b = FieldElement::from_str_radix(
-            "28E9FA9E9D9F5E344D5A9E4BCF6509A7F39789F515AB8F92DDBCBD414D940E93",
-            16,
-        )
-        .unwrap();
+        let a = FieldElement::new([
+            0xffff_fffe,
+            0xffff_ffff,
+            0xffff_ffff,
+            0xffff_ffff,
+            0xffff_ffff,
+            0x0000_0000,
+            0xffff_ffff,
+            0xffff_fffc,
+        ]);
+        let b = FieldElement::new([
+            0x28e9_fa9e,
+            0x9d9f_5e34,
+            0x4d5a_9e4b,
+            0xcf65_09a7,
+            0xf397_89f5,
+            0x15ab_8f92,
+            0xddbc_bd41,
+            0x4d94_0e93,
+        ]);
 
-        let g_x = FieldElement::from_str_radix(
-            "32C4AE2C1F1981195F9904466A39C9948FE30BBFF2660BE1715A4589334C74C7",
-            16,
-        )
-        .unwrap();
-        let g_y = FieldElement::from_str_radix(
-            "BC3736A2F4F6779C59BDCEE36B692153D0A9877CC62A474002DF32E52139F0A0",
-            16,
-        )
-        .unwrap();
+        let g_x = FieldElement::new([
+            0x32c4_ae2c,
+            0x1f19_8119,
+            0x5f99_0446,
+            0x6a39_c994,
+            0x8fe3_0bbf,
+            0xf266_0be1,
+            0x715a_4589,
+            0x334c_74c7,
+        ]);
+        let g_y = FieldElement::new([
+            0xbc37_36a2,
+            0xf4f6_779c,
+            0x59bd_cee3,
+            0x6b69_2153,
+            0xd0a9_877c,
+            0xc62a_4740,
+            0x02df_32e5,
+            0x2139_f0a0,
+        ]);
 
         let ctx = CurveParameters {
             p,
             n,
             a,
             b,
-            h: FieldElement::from_u32(1), // The Cofactor, the recommended value is 1
+            h: BigUint::one(), // The Cofactor, the recommended value is 1
             g_point: Point {
                 x: g_x,
                 y: g_y,
@@ -172,7 +197,7 @@ impl Point {
                 } else {
                     return Err(Sm2Error::InvalidPublic);
                 }
-                let x = FieldElement::from_bytes_be(&b[1..]);
+                let x = FieldElement::from_bytes_be(&b[1..])?;
                 let xxx = &x * &x * &x;
                 let ax = &P256C_PARAMS.a * &x;
                 let yy = &xxx + &ax + &P256C_PARAMS.b;
@@ -192,8 +217,8 @@ impl Point {
                 if b.len() != 65 {
                     return Err(Sm2Error::InvalidPublic);
                 }
-                let x = FieldElement::from_bytes_be(&b[1..33]);
-                let y = FieldElement::from_bytes_be(&b[33..65]);
+                let x = FieldElement::from_bytes_be(&b[1..33])?;
+                let y = FieldElement::from_bytes_be(&b[33..65])?;
                 Ok(Point {
                     x,
                     y,
@@ -214,12 +239,10 @@ impl Point {
             true
         } else {
             // y^2 = x^3 + a * x * z^4 + b * z^6
-            let ecc_p = &P256C_PARAMS.p;
             let yy = &self.y * &self.y;
             let xxx = &self.x * &self.x * &self.x;
-            let axz =
-                &P256C_PARAMS.a * &self.x * &self.z.modpow(&BigUint::from_u32(4).unwrap(), ecc_p);
-            let bz = &P256C_PARAMS.b * &self.z.modpow(&BigUint::from_u32(6).unwrap(), ecc_p);
+            let axz = &P256C_PARAMS.a * &self.x * &self.z.modpow(&BigUint::from_u32(4).unwrap());
+            let bz = &P256C_PARAMS.b * &self.z.modpow(&BigUint::from_u32(6).unwrap());
             let exp = &xxx + &axz + &bz;
             yy.eq(&exp)
         }
@@ -273,20 +296,20 @@ impl Point {
         let yy = y1.square();
         let zz = z1.square();
 
-        let yyyy = &yy.square();
-        let s = ((x1 + &yy).square() - &xx - yyyy) * 2u32;
-        let m = &xx * 3u32 + ecc_a * &zz.square();
-        let t = &m.square() - &s * 2u32;
-        let y3 = &m * (&s - &t) - yyyy * 8u32;
-        let x3 = t;
-        let z3 = (y1 + z1).square() - &yy - &zz;
+        // let yyyy = &yy.square();
+        // let s = ((x1 + &yy).square() - &xx - yyyy) * 2;
+        // let m = &xx * 3 + ecc_a * &zz.square();
+        // let t = &m.square() - &s * 2;
+        // let y3 = &m * (&s - &t) - yyyy * 8;
+        // let x3 = t;
+        // let z3 = (y1 + z1).square() - &yy - &zz;
 
-        // let lambda1 = &xx * 3u32 + ecc_a * (&zz * &zz);
-        // let lambda2 = x1 * 4u32 * &yy;
-        // let lambda3 = &yy * &yy * 8u32;
-        // let x3 = &lambda1 * &lambda1 - &lambda2 * 2u32;
-        // let y3 = &lambda1 * (&lambda2 - &x3) - &lambda3;
-        // let z3 = y1 * 2u32 * z1;
+        let lambda1 = &xx * 3 + ecc_a * (&zz.square());
+        let lambda2 = x1 * 4 * &yy;
+        let lambda3 = &yy.square() * 8;
+        let x3 = &lambda1.square() - &lambda2 * 2;
+        let y3 = &lambda1 * (&lambda2 - &x3) - &lambda3;
+        let z3 = y1 * 2 * z1;
 
         let p = Point {
             x: x3,
@@ -344,19 +367,19 @@ impl Point {
             let s2 = y2 * z1 * &z1z1;
             let h = &u2 - &u1;
 
-            let i = (&h * 2u32).square();
+            let i = (&h * 2).square();
             let j = &h * &i;
-            let r = (&s2 - &s1) * 2u32;
+            let r = (&s2 - &s1) * 2;
             let v = &u1 * &i;
-            let x3 = &r.square() - &j - &v * 2u32;
-            let y3 = &r * (&v - &x3) - &s1 * &j * 2u32;
+            let x3 = &r.square() - &j - &v * 2;
+            let y3 = &r * (&v - &x3) - &s1 * &j * 2;
             let z3 = &h * ((z1 + z2).square() - &z1z1 - z2z2);
 
             // let r = &s2 - &s1;
             // let hh = &h * &h;
             // let hhh = &h * &hh;
             // let v = &u1 * &hh;
-            // let x3 = &r * &r - &hhh - &v * 2u32;
+            // let x3 = &r * &r - &hhh - &v * 2;
             // let y3 = &r * (&v - &x3) - &s1 * &hhh;
             // let z3 = z1 * z2 * &h;
 
@@ -373,8 +396,12 @@ impl Point {
 //
 // P = [k]G
 pub fn scalar_mul(m: &BigUint, p: &Point) -> Point {
-    // let m = m % P256C_PARAMS.n.inner();
     mul_naf(&m, p)
+    // if m.is_one() {
+    //     mul_naf(&m, p)
+    // } else {
+    //     mul_binary(&m, p)
+    // }
 }
 
 // 二进制展开法
@@ -395,9 +422,9 @@ pub fn mul_binary(m: &BigUint, p: &Point) -> Point {
 
 // 滑动窗法
 pub fn mul_naf(m: &BigUint, p: &Point) -> Point {
-    let k = from_biguint(&m);
+    let k = FieldElement::from_biguint(m).unwrap();
     let mut l = 256;
-    let naf = w_naf(&k, 5, &mut l);
+    let naf = w_naf(&k.inner, 5, &mut l);
 
     // 预处理计算
     let p1 = p.clone();

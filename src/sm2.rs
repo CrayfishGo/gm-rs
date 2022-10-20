@@ -4,7 +4,6 @@ use num_traits::{One, Zero};
 use rand::RngCore;
 
 use crate::sm2::p256_ecc::P256C_PARAMS;
-use crate::sm2::p256_field::FieldElement;
 use crate::sm3;
 
 pub mod error;
@@ -15,14 +14,14 @@ pub mod p256_field;
 pub mod signature;
 
 pub(crate) fn random_uint() -> BigUint {
-    let n: &FieldElement = &P256C_PARAMS.n;
+    let n = &P256C_PARAMS.n;
     let mut rng = rand::thread_rng();
     let mut buf: [u8; 32] = [0; 32];
     let mut ret;
     loop {
         rng.fill_bytes(&mut buf[..]);
         ret = BigUint::from_bytes_be(&buf[..]);
-        if ret < n.inner() - BigUint::one() && ret != BigUint::zero() {
+        if ret < n - BigUint::one() && ret != BigUint::zero() {
             break;
         }
     }
@@ -118,24 +117,6 @@ pub fn kdf(z: &[u8], klen: usize) -> Vec<u8> {
         h_a.extend_from_slice(&last[0..(klen % 32)]);
     }
     h_a
-}
-
-pub fn quick_pow(a: &BigUint, n: &BigUint) -> BigUint {
-    let p = P256C_PARAMS.p.inner();
-    let mut ans = BigUint::one();
-    let zero = BigUint::zero();
-    let two = BigUint::new(vec![2]);
-    let mut n = n.clone();
-    let mut a = a.clone();
-    while n > zero {
-        if &n & BigUint::one() > zero {
-            // 判断二进制数的末位为0还是为1
-            ans = &ans * &a % p; //ans乘上当前的a
-        }
-        a = &a * &a % p; //a自乘
-        n = n / &two // 将二进制数右移一位，也相当于/2
-    }
-    ans
 }
 
 #[cfg(test)]

@@ -1,21 +1,20 @@
-use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use core::fmt;
 use core::ops::Add;
 use std::cmp::Ordering;
 use std::fmt::Display;
 use std::hash;
 use std::io::Cursor;
-use std::ops::{Mul, Rem, Sub};
+use std::ops::{Mul, Sub};
 
-use num_bigint::{BigUint, ParseBigIntError};
-use num_traits::{FromPrimitive, Num, One, Zero};
+use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use num_bigint::BigUint;
+use num_traits::Num;
 
+use crate::{
+    forward_ref_ref_binop, forward_ref_val_binop, forward_val_val_binop,
+};
 use crate::sm2::error::{Sm2Error, Sm2Result};
 use crate::sm2::p256_ecc::P256C_PARAMS;
-use crate::sm2::ModOperation;
-use crate::{
-    forward_ref_ref_binop, forward_ref_val_binop, forward_val_ref_binop, forward_val_val_binop,
-};
 
 /// 素域Fp的域元素
 ///
@@ -29,41 +28,77 @@ use crate::{
 /// * Fp的乘法单位元是整数1
 /// * Fp的加法单位元是整数0
 /// * Fp域上满足交换律，结合律，分配律
+#[derive(Copy)]
 pub struct FieldElement {
-    inner: BigUint,
+    pub(crate) inner: [u32; 8],
 }
 
 impl FieldElement {
+    pub fn new(x: [u32; 8]) -> FieldElement {
+        FieldElement { inner: x }
+    }
+
+    pub fn from_slice(x: &[u32]) -> FieldElement {
+        let mut arr: [u32; 8] = [0; 8];
+        arr.copy_from_slice(&x[0..8]);
+        FieldElement::new(arr)
+    }
+
     #[inline]
-    pub fn from_u32(n: u32) -> FieldElement {
-        FieldElement {
-            inner: BigUint::from_u32(n).unwrap(),
-        }
+    pub fn from_number(x: u64) -> FieldElement {
+        let mut arr: [u32; 8] = [0; 8];
+        arr[7] = (x & 0xffff_ffff) as u32;
+        arr[6] = (x >> 32) as u32;
+        FieldElement { inner: arr }
     }
 
     #[inline]
     pub fn to_bytes_be(&self) -> Vec<u8> {
-        self.inner.to_bytes_be()
+        let mut ret: Vec<u8> = Vec::new();
+        for i in 0..8 {
+            ret.write_u32::<BigEndian>(self.inner[i]).unwrap();
+        }
+        ret
     }
 
     #[inline]
-    pub fn to_u32_digits(&self) -> Vec<u32> {
-        self.inner.to_u32_digits()
+    pub fn from_bytes_be(bytes: &[u8]) -> Sm2Result<FieldElement> {
+        if bytes.len() != 32 {
+            return Err(Sm2Error::InvalidFieldLen);
+        }
+        let mut elem = FieldElement::zero();
+        let mut c = Cursor::new(bytes);
+        for i in 0..8 {
+            let x = c.read_u32::<BigEndian>().unwrap();
+            elem.inner[i] = x;
+        }
+        Ok(elem)
     }
 
-    #[inline]
-    pub fn from_bytes_be(bytes: &[u8]) -> FieldElement {
-        FieldElement {
-            inner: BigUint::from_bytes_be(bytes),
-        }
+    pub fn to_biguint(&self) -> BigUint {
+        let v = self.to_bytes_be();
+        BigUint::from_bytes_be(&v[..])
     }
 
-    pub fn from_str_radix(s: &str, radix: u32) -> Result<FieldElement, ParseBigIntError> {
-        let r = BigUint::from_str_radix(s, radix);
-        match r {
-            Ok(inner) => Ok(FieldElement { inner }),
-            Err(e) => Err(e),
+    pub fn from_biguint(bi: &BigUint) -> Sm2Result<FieldElement> {
+        let v = bi.to_bytes_be();
+        let mut num_v = [0u8; 32];
+        num_v[32 - v.len()..32].copy_from_slice(&v[..]);
+        FieldElement::from_bytes_be(&num_v[..])
+    }
+
+    pub fn div2(&self, carry: u32) -> FieldElement {
+        let mut ret = FieldElement::zero();
+        let mut carry = carry;
+
+        let mut i = 0;
+        while i < 8 {
+            ret.inner[i] = (carry << 31) + (self.inner[i] >> 1);
+            carry = self.inner[i] & 0x01;
+
+            i += 1;
         }
+        ret
     }
 
     pub fn sqrt(&self) -> Sm2Result<FieldElement> {
@@ -74,9 +109,9 @@ impl FieldElement {
             10,
         )
         .unwrap();
-        let y = self.modpow(&u, &P256C_PARAMS.p);
-        let z = &y * &y;
-        if z == *self {
+        let y = self.modpow(&u);
+        let z = &y.square();
+        if z == self {
             Ok(y)
         } else {
             Err(Sm2Error::FieldSqrtError)
@@ -85,45 +120,302 @@ impl FieldElement {
 
     #[inline]
     pub fn to_str_radix(&self, radix: u32) -> String {
-        self.inner.to_str_radix(radix)
+        self.to_biguint().to_str_radix(radix)
     }
 
     pub fn zero() -> FieldElement {
-        FieldElement {
-            inner: BigUint::zero(),
-        }
+        FieldElement::new([0; 8])
     }
 
     pub fn one() -> FieldElement {
-        FieldElement {
-            inner: BigUint::one(),
-        }
+        FieldElement::from_number(1)
+    }
+
+    pub fn is_even(&self) -> bool {
+        self.inner[7] & 0x01 == 0
     }
 
     pub fn is_zero(&self) -> bool {
-        self.inner.is_zero()
+        self.inner == [0; 8]
     }
 
     pub fn square(&self) -> FieldElement {
-        let rns = self.inner.pow(2);
-        FieldElement {
-            inner: rns % &P256C_PARAMS.p.inner,
-        }
+        self.clone() * self.clone()
     }
 
-    pub fn modpow(&self, exponent: &BigUint, modulus: &Self) -> Self {
-        FieldElement {
-            inner: self.inner.modpow(&exponent, &modulus.inner),
+    pub fn modpow(&self, exponent: &BigUint) -> Self {
+        let u = FieldElement::from_biguint(exponent).unwrap();
+
+        let mut q0 = FieldElement::from_number(1);
+        let mut q1 = *self;
+
+        let mut i = 0;
+        while i < 256 {
+            let index = i as usize / 32;
+            let bit = 31 - i as usize % 32;
+
+            let sum = &q0 * &q1;
+            if (u.inner[index] >> bit) & 0x01 == 0 {
+                q1 = sum;
+                q0 = q0.square();
+            } else {
+                q0 = sum;
+                q1 = q1.square();
+            }
+
+            i += 1;
         }
-    }
-    pub fn inner(&self) -> &BigUint {
-        &self.inner
+        q0
     }
 
     // calculate x^(-1) mod p
     pub fn modinv(&self) -> FieldElement {
         let ecc_p = &P256C_PARAMS.p;
-        self.modpow(&(&ecc_p.inner - BigUint::from_u32(2).unwrap()), ecc_p)
+        let mut ru = *self;
+        let mut rv = ecc_p.clone();
+        let mut ra = FieldElement::from_number(1);
+        let mut rc = FieldElement::zero();
+
+        while !ru.is_zero() {
+            if ru.is_even() {
+                ru = ru.div2(0);
+                if ra.is_even() {
+                    ra = ra.div2(0);
+                } else {
+                    let (sum, car) = self.add_raw(&ra.inner, &ecc_p.inner);
+                    ra = FieldElement::new(sum).div2(car);
+                }
+            }
+
+            if rv.is_even() {
+                rv = rv.div2(0);
+                if rc.is_even() {
+                    rc = rc.div2(0);
+                } else {
+                    let (sum, car) = self.add_raw(&rc.inner, &ecc_p.inner);
+                    rc = FieldElement::new(sum).div2(car);
+                }
+            }
+
+            if ru >= rv {
+                ru = &ru - &rv;
+                ra = &ra - &rc;
+            } else {
+                rv = &rv - &ru;
+                rc = &rc - &ra;
+            }
+        }
+        rc
+    }
+}
+
+impl FieldElement {
+    fn mod_sub_raw(&self, a: &[u32; 8], b: &[u32; 8], modulus: &[u32; 8]) -> [u32; 8] {
+        let (modulus_complete, _) = self.sub_raw(&[0; 8], &modulus);
+        let (raw_diff, borrow) = self.sub_raw(a, b);
+        if borrow == 1 {
+            let (diff, _borrow) = self.sub_raw(&raw_diff, &modulus_complete);
+            diff
+        } else {
+            raw_diff
+        }
+    }
+
+    fn sub_raw(&self, a: &[u32; 8], b: &[u32; 8]) -> ([u32; 8], u32) {
+        let mut sum = [0; 8];
+        let mut borrow: u32 = 0;
+        let mut j = 0;
+        while j < 8 {
+            let i = 7 - j;
+            let t_sum: i64 = i64::from(a[i]) - i64::from(b[i]) - i64::from(borrow);
+            if t_sum < 0 {
+                sum[i] = (t_sum + (1 << 32)) as u32;
+                borrow = 1;
+            } else {
+                sum[i] = t_sum as u32;
+                borrow = 0;
+            }
+            j += 1;
+        }
+        (sum, borrow)
+    }
+
+    fn mod_add_raw(&self, a: &[u32; 8], b: &[u32; 8], modulus: &[u32; 8]) -> [u32; 8] {
+        let (raw_sum, carry) = self.add_raw(a, b);
+        if carry == 1 || raw_sum >= *modulus {
+            let (sum, _borrow) = self.sub_raw(&raw_sum, &modulus);
+            sum
+        } else {
+            raw_sum
+        }
+    }
+
+    fn add_raw(&self, a: &[u32; 8], b: &[u32; 8]) -> ([u32; 8], u32) {
+        let mut sum = [0; 8];
+        let mut carry: u32 = 0;
+
+        let t_sum: u64 = u64::from(a[7]) + u64::from(b[7]) + u64::from(carry);
+        sum[7] = (t_sum & 0xffff_ffff) as u32;
+        carry = (t_sum >> 32) as u32;
+
+        let t_sum: u64 = u64::from(a[6]) + u64::from(b[6]) + u64::from(carry);
+        sum[6] = (t_sum & 0xffff_ffff) as u32;
+        carry = (t_sum >> 32) as u32;
+
+        let t_sum: u64 = u64::from(a[5]) + u64::from(b[5]) + u64::from(carry);
+        sum[5] = (t_sum & 0xffff_ffff) as u32;
+        carry = (t_sum >> 32) as u32;
+
+        let t_sum: u64 = u64::from(a[4]) + u64::from(b[4]) + u64::from(carry);
+        sum[4] = (t_sum & 0xffff_ffff) as u32;
+        carry = (t_sum >> 32) as u32;
+
+        let t_sum: u64 = u64::from(a[3]) + u64::from(b[3]) + u64::from(carry);
+        sum[3] = (t_sum & 0xffff_ffff) as u32;
+        carry = (t_sum >> 32) as u32;
+
+        let t_sum: u64 = u64::from(a[2]) + u64::from(b[2]) + u64::from(carry);
+        sum[2] = (t_sum & 0xffff_ffff) as u32;
+        carry = (t_sum >> 32) as u32;
+
+        let t_sum: u64 = u64::from(a[1]) + u64::from(b[1]) + u64::from(carry);
+        sum[1] = (t_sum & 0xffff_ffff) as u32;
+        carry = (t_sum >> 32) as u32;
+
+        let t_sum: u64 = u64::from(a[0]) + u64::from(b[0]) + u64::from(carry);
+        sum[0] = (t_sum & 0xffff_ffff) as u32;
+        carry = (t_sum >> 32) as u32;
+
+        (sum, carry)
+    }
+
+    fn mod_mul_raw(&self, a: &[u32; 8], b: &[u32; 8], modulus: &[u32; 8]) -> [u32; 8] {
+        let raw_prod = self.mul_raw(a, b);
+        self.fast_reduction(&raw_prod, &modulus)
+    }
+
+    fn mul_raw(&self, a: &[u32; 8], b: &[u32; 8]) -> [u32; 16] {
+        let mut local: u64 = 0;
+        let mut carry: u64 = 0;
+        let mut ret: [u32; 16] = [0; 16];
+
+        let mut ret_idx = 0;
+        while ret_idx < 15 {
+            let index = 15 - ret_idx;
+            let mut a_idx = 0;
+            while a_idx < 8 {
+                if a_idx > ret_idx {
+                    break;
+                }
+                let b_idx = ret_idx - a_idx;
+                if b_idx < 8 {
+                    let (hi, lo) = self.u32_mul(a[7 - a_idx], b[7 - b_idx]);
+                    local += lo;
+                    carry += hi;
+                }
+
+                a_idx += 1;
+            }
+            carry += local >> 32;
+            local &= 0xffff_ffff;
+            ret[index] = local as u32;
+            local = carry;
+            carry = 0;
+
+            ret_idx += 1;
+        }
+        ret[0] = local as u32;
+        ret
+    }
+
+    #[inline(always)]
+    fn u32_mul(&self, a: u32, b: u32) -> (u64, u64) {
+        let uv = u64::from(a) * u64::from(b);
+        let u = uv >> 32;
+        let v = uv & 0xffff_ffff;
+        (u, v)
+    }
+
+    // a quick algorithm to reduce elements on SCA-256 field
+    // Reference:
+    // http://ieeexplore.ieee.org/document/7285166/ for details
+    #[inline]
+    fn fast_reduction(&self, input: &[u32; 16], modulus: &[u32; 8]) -> [u32; 8] {
+        let mut rs: [[u32; 8]; 10] = [[0; 8]; 10];
+        let mut rx: [u32; 16] = [0; 16];
+
+        let mut i = 0;
+        while i < 16 {
+            rx[i] = input[15 - i];
+            i += 1;
+        }
+
+        rs[0] = [rx[7], rx[6], rx[5], rx[4], rx[3], rx[2], rx[1], rx[0]];
+        rs[1] = [rx[15], 0, 0, 0, 0, 0, rx[15], rx[14]];
+        rs[2] = [rx[14], 0, 0, 0, 0, 0, rx[14], rx[13]];
+        rs[3] = [rx[13], 0, 0, 0, 0, 0, 0, 0];
+        rs[4] = [rx[12], 0, rx[15], rx[14], rx[13], 0, 0, rx[15]];
+        rs[5] = [rx[15], rx[15], rx[14], rx[13], rx[12], 0, rx[11], rx[10]];
+        rs[6] = [rx[11], rx[14], rx[13], rx[12], rx[11], 0, rx[10], rx[9]];
+        rs[7] = [rx[10], rx[11], rx[10], rx[9], rx[8], 0, rx[13], rx[12]];
+        rs[8] = [rx[9], 0, 0, rx[15], rx[14], 0, rx[9], rx[8]];
+        rs[9] = [rx[8], 0, 0, 0, rx[15], 0, rx[12], rx[11]];
+
+        let mut carry: i32 = 0;
+        let mut sum = [0; 8];
+
+        let (rt, rc) = self.add_raw(&sum, &rs[1]);
+        sum = rt;
+        carry += rc as i32;
+        let (rt, rc) = self.add_raw(&sum, &rs[2]);
+        sum = rt;
+        carry += rc as i32;
+        let (rt, rc) = self.add_raw(&sum, &rs[3]);
+        sum = rt;
+        carry += rc as i32;
+        let (rt, rc) = self.add_raw(&sum, &rs[4]);
+        sum = rt;
+        carry += rc as i32;
+
+        let (rt, rc) = self.add_raw(&sum, &sum);
+        sum = rt;
+        carry = carry * 2 + rc as i32;
+
+        let (rt, rc) = self.add_raw(&sum, &rs[5]);
+        sum = rt;
+        carry += rc as i32;
+        let (rt, rc) = self.add_raw(&sum, &rs[6]);
+        sum = rt;
+        carry += rc as i32;
+        let (rt, rc) = self.add_raw(&sum, &rs[7]);
+        sum = rt;
+        carry += rc as i32;
+        let (rt, rc) = self.add_raw(&sum, &rs[8]);
+        sum = rt;
+        carry += rc as i32;
+        let (rt, rc) = self.add_raw(&sum, &rs[9]);
+        sum = rt;
+        carry += rc as i32;
+
+        let mut part3 = [0; 8];
+        let rt: u64 = u64::from(rx[8]) + u64::from(rx[9]) + u64::from(rx[13]) + u64::from(rx[14]);
+        part3[5] = (rt & 0xffff_ffff) as u32;
+        part3[4] = (rt >> 32) as u32;
+
+        let (rt, rc) = self.add_raw(&sum, &rs[0]);
+        sum = rt;
+        carry += rc as i32;
+
+        let (rt, rc) = self.sub_raw(&sum, &part3);
+        sum = rt;
+        carry -= rc as i32;
+
+        while carry > 0 || sum >= *modulus {
+            let (rs, rb) = self.sub_raw(&sum, modulus);
+            sum = rs;
+            carry -= rb as i32;
+        }
+        sum
     }
 }
 
@@ -170,12 +462,6 @@ impl Ord for FieldElement {
     }
 }
 
-impl From<BigUint> for FieldElement {
-    fn from(n: BigUint) -> Self {
-        Self { inner: n }
-    }
-}
-
 forward_val_val_binop!(impl Add for FieldElement, add);
 forward_ref_ref_binop!(impl Add for FieldElement, add);
 forward_ref_val_binop!(impl Add for FieldElement, add);
@@ -183,7 +469,7 @@ impl<'a> Add<&'a FieldElement> for FieldElement {
     type Output = FieldElement;
 
     fn add(mut self, rhs: &FieldElement) -> Self::Output {
-        self.inner = self.inner.modadd(rhs.inner(), &P256C_PARAMS.p.inner);
+        self.inner = self.mod_add_raw(&self.inner, &rhs.inner, &P256C_PARAMS.p.inner);
         self
     }
 }
@@ -195,7 +481,7 @@ impl<'a> Sub<&'a FieldElement> for FieldElement {
     type Output = FieldElement;
 
     fn sub(mut self, rhs: &'a FieldElement) -> Self::Output {
-        self.inner = self.inner.modsub(rhs.inner(), &P256C_PARAMS.p.inner);
+        self.inner = self.mod_sub_raw(&self.inner, &rhs.inner, &P256C_PARAMS.p.inner);
         self
     }
 }
@@ -207,69 +493,55 @@ impl<'a> Mul<&'a FieldElement> for FieldElement {
     type Output = FieldElement;
 
     fn mul(mut self, rhs: &'a FieldElement) -> Self::Output {
-        self.inner = self.inner.modmul(rhs.inner(), &P256C_PARAMS.p.inner);
+        self.inner = self.mod_mul_raw(&self.inner, &rhs.inner, &P256C_PARAMS.p.inner);
         self
     }
 }
 
-impl Add<u32> for FieldElement {
+impl Add<u64> for FieldElement {
     type Output = FieldElement;
 
-    fn add(mut self, rhs: u32) -> Self::Output {
-        self.inner = self.inner.modadd_u32(rhs, &P256C_PARAMS.p.inner);
+    fn add(mut self, rhs: u64) -> Self::Output {
+        self.inner = self.mod_add_raw(
+            &self.inner,
+            &FieldElement::from_number(rhs).inner,
+            &P256C_PARAMS.p.inner,
+        );
         self
     }
 }
 
-impl Mul<u32> for FieldElement {
+impl Mul<u64> for FieldElement {
     type Output = FieldElement;
 
-    fn mul(mut self, rhs: u32) -> Self::Output {
-        self.inner = self.inner.modmul_u32(rhs, &P256C_PARAMS.p.inner);
+    fn mul(mut self, rhs: u64) -> Self::Output {
+        self.inner = self.mod_mul_raw(
+            &self.inner,
+            &FieldElement::from_number(rhs).inner,
+            &P256C_PARAMS.p.inner,
+        );
         self
     }
 }
 
-impl<'a> Mul<u32> for &'a FieldElement {
+impl<'a> Mul<u64> for &'a FieldElement {
     type Output = FieldElement;
 
-    fn mul(self, rhs: u32) -> Self::Output {
+    fn mul(self, rhs: u64) -> Self::Output {
         let mut s = self.clone();
-        s.inner = self.inner.modmul_u32(rhs, &P256C_PARAMS.p.inner);
+        s.inner = self.mod_mul_raw(
+            &s.inner,
+            &FieldElement::from_number(rhs).inner,
+            &P256C_PARAMS.p.inner,
+        );
         s
-    }
-}
-
-forward_val_ref_binop!(impl Rem for FieldElement, rem);
-forward_ref_val_binop!(impl Rem for FieldElement, rem);
-impl Rem<FieldElement> for FieldElement {
-    type Output = FieldElement;
-
-    #[inline]
-    fn rem(self, other: FieldElement) -> FieldElement {
-        FieldElement {
-            inner: self.inner % other.inner,
-        }
-    }
-}
-
-impl<'a, 'b> Rem<&'b FieldElement> for &'a FieldElement {
-    type Output = FieldElement;
-
-    #[inline]
-    fn rem(self, other: &FieldElement) -> FieldElement {
-        FieldElement {
-            inner: &self.inner % &other.inner,
-        }
     }
 }
 
 impl Default for FieldElement {
     #[inline]
     fn default() -> FieldElement {
-        FieldElement {
-            inner: Zero::zero(),
-        }
+        FieldElement { inner: [0; 8] }
     }
 }
 
@@ -309,234 +581,4 @@ impl fmt::Octal for FieldElement {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.pad_integral(true, "0o", &self.to_str_radix(8))
     }
-}
-
-pub fn from_biguint(bi: &BigUint) -> [u32; 8] {
-    let v = bi.to_bytes_be();
-    let mut num_v = [0u8; 32];
-    num_v[32 - v.len()..32].copy_from_slice(&v[..]);
-
-    let mut elem = [0; 8];
-    let mut c = Cursor::new(num_v);
-    for i in 0..8 {
-        let x = c.read_u32::<BigEndian>().unwrap();
-        elem[i] = x;
-    }
-    elem
-}
-
-pub fn to_bigunit(value: &[u32; 8]) -> BigUint {
-    let mut ret: Vec<u8> = Vec::new();
-    for i in 0..8 {
-        ret.write_u32::<BigEndian>(value[i]).unwrap();
-    }
-    BigUint::from_bytes_be(&ret[..])
-}
-
-pub fn mod_sub_raw(a: &[u32; 8], b: &[u32; 8], modulus: &[u32; 8]) -> [u32; 8] {
-    let (modulus_complete, _) = sub_raw(&[0; 8], &modulus);
-    let (raw_diff, borrow) = sub_raw(a, b);
-    if borrow == 1 {
-        let (diff, _borrow) = sub_raw(&raw_diff, &modulus_complete);
-        diff
-    } else {
-        raw_diff
-    }
-}
-
-fn sub_raw(a: &[u32; 8], b: &[u32; 8]) -> ([u32; 8], u32) {
-    let mut sum = [0; 8];
-    let mut borrow: u32 = 0;
-    let mut j = 0;
-    while j < 8 {
-        let i = 7 - j;
-        let t_sum: i64 = i64::from(a[i]) - i64::from(b[i]) - i64::from(borrow);
-        if t_sum < 0 {
-            sum[i] = (t_sum + (1 << 32)) as u32;
-            borrow = 1;
-        } else {
-            sum[i] = t_sum as u32;
-            borrow = 0;
-        }
-        j += 1;
-    }
-    (sum, borrow)
-}
-
-pub fn mod_add_raw(a: &[u32; 8], b: &[u32; 8], modulus: &[u32; 8]) -> [u32; 8] {
-    let (raw_sum, carry) = add_raw(a, b);
-    if carry == 1 || raw_sum >= *modulus {
-        let (sum, _borrow) = sub_raw(&raw_sum, &modulus);
-        sum
-    } else {
-        raw_sum
-    }
-}
-
-fn add_raw(a: &[u32; 8], b: &[u32; 8]) -> ([u32; 8], u32) {
-    let mut sum = [0; 8];
-    let mut carry: u32 = 0;
-
-    let t_sum: u64 = u64::from(a[7]) + u64::from(b[7]) + u64::from(carry);
-    sum[7] = (t_sum & 0xffff_ffff) as u32;
-    carry = (t_sum >> 32) as u32;
-
-    let t_sum: u64 = u64::from(a[6]) + u64::from(b[6]) + u64::from(carry);
-    sum[6] = (t_sum & 0xffff_ffff) as u32;
-    carry = (t_sum >> 32) as u32;
-
-    let t_sum: u64 = u64::from(a[5]) + u64::from(b[5]) + u64::from(carry);
-    sum[5] = (t_sum & 0xffff_ffff) as u32;
-    carry = (t_sum >> 32) as u32;
-
-    let t_sum: u64 = u64::from(a[4]) + u64::from(b[4]) + u64::from(carry);
-    sum[4] = (t_sum & 0xffff_ffff) as u32;
-    carry = (t_sum >> 32) as u32;
-
-    let t_sum: u64 = u64::from(a[3]) + u64::from(b[3]) + u64::from(carry);
-    sum[3] = (t_sum & 0xffff_ffff) as u32;
-    carry = (t_sum >> 32) as u32;
-
-    let t_sum: u64 = u64::from(a[2]) + u64::from(b[2]) + u64::from(carry);
-    sum[2] = (t_sum & 0xffff_ffff) as u32;
-    carry = (t_sum >> 32) as u32;
-
-    let t_sum: u64 = u64::from(a[1]) + u64::from(b[1]) + u64::from(carry);
-    sum[1] = (t_sum & 0xffff_ffff) as u32;
-    carry = (t_sum >> 32) as u32;
-
-    let t_sum: u64 = u64::from(a[0]) + u64::from(b[0]) + u64::from(carry);
-    sum[0] = (t_sum & 0xffff_ffff) as u32;
-    carry = (t_sum >> 32) as u32;
-
-    (sum, carry)
-}
-
-pub fn mod_mul_raw(a: &[u32; 8], b: &[u32; 8], modulus: &[u32; 8]) -> [u32; 8] {
-    let raw_prod = mul_raw(a, b);
-    fast_reduction(&raw_prod, &modulus)
-}
-
-fn mul_raw(a: &[u32; 8], b: &[u32; 8]) -> [u32; 16] {
-    let mut local: u64 = 0;
-    let mut carry: u64 = 0;
-    let mut ret: [u32; 16] = [0; 16];
-
-    let mut ret_idx = 0;
-    while ret_idx < 15 {
-        let index = 15 - ret_idx;
-        let mut a_idx = 0;
-        while a_idx < 8 {
-            if a_idx > ret_idx {
-                break;
-            }
-            let b_idx = ret_idx - a_idx;
-            if b_idx < 8 {
-                let (hi, lo) = u32_mul(a[7 - a_idx], b[7 - b_idx]);
-                local += lo;
-                carry += hi;
-            }
-
-            a_idx += 1;
-        }
-        carry += local >> 32;
-        local &= 0xffff_ffff;
-        ret[index] = local as u32;
-        local = carry;
-        carry = 0;
-
-        ret_idx += 1;
-    }
-    ret[0] = local as u32;
-    ret
-}
-
-#[inline(always)]
-fn u32_mul(a: u32, b: u32) -> (u64, u64) {
-    let uv = u64::from(a) * u64::from(b);
-    let u = uv >> 32;
-    let v = uv & 0xffff_ffff;
-    (u, v)
-}
-
-// a quick algorithm to reduce elements on SCA-256 field
-// Reference:
-// http://ieeexplore.ieee.org/document/7285166/ for details
-#[inline]
-fn fast_reduction(input: &[u32; 16], modulus: &[u32; 8]) -> [u32; 8] {
-    let mut rs: [[u32; 8]; 10] = [[0; 8]; 10];
-    let mut rx: [u32; 16] = [0; 16];
-
-    let mut i = 0;
-    while i < 16 {
-        rx[i] = input[15 - i];
-        i += 1;
-    }
-
-    rs[0] = [rx[7], rx[6], rx[5], rx[4], rx[3], rx[2], rx[1], rx[0]];
-    rs[1] = [rx[15], 0, 0, 0, 0, 0, rx[15], rx[14]];
-    rs[2] = [rx[14], 0, 0, 0, 0, 0, rx[14], rx[13]];
-    rs[3] = [rx[13], 0, 0, 0, 0, 0, 0, 0];
-    rs[4] = [rx[12], 0, rx[15], rx[14], rx[13], 0, 0, rx[15]];
-    rs[5] = [rx[15], rx[15], rx[14], rx[13], rx[12], 0, rx[11], rx[10]];
-    rs[6] = [rx[11], rx[14], rx[13], rx[12], rx[11], 0, rx[10], rx[9]];
-    rs[7] = [rx[10], rx[11], rx[10], rx[9], rx[8], 0, rx[13], rx[12]];
-    rs[8] = [rx[9], 0, 0, rx[15], rx[14], 0, rx[9], rx[8]];
-    rs[9] = [rx[8], 0, 0, 0, rx[15], 0, rx[12], rx[11]];
-
-    let mut carry: i32 = 0;
-    let mut sum = [0; 8];
-
-    let (rt, rc) = add_raw(&sum, &rs[1]);
-    sum = rt;
-    carry += rc as i32;
-    let (rt, rc) = add_raw(&sum, &rs[2]);
-    sum = rt;
-    carry += rc as i32;
-    let (rt, rc) = add_raw(&sum, &rs[3]);
-    sum = rt;
-    carry += rc as i32;
-    let (rt, rc) = add_raw(&sum, &rs[4]);
-    sum = rt;
-    carry += rc as i32;
-
-    let (rt, rc) = add_raw(&sum, &sum);
-    sum = rt;
-    carry = carry * 2 + rc as i32;
-
-    let (rt, rc) = add_raw(&sum, &rs[5]);
-    sum = rt;
-    carry += rc as i32;
-    let (rt, rc) = add_raw(&sum, &rs[6]);
-    sum = rt;
-    carry += rc as i32;
-    let (rt, rc) = add_raw(&sum, &rs[7]);
-    sum = rt;
-    carry += rc as i32;
-    let (rt, rc) = add_raw(&sum, &rs[8]);
-    sum = rt;
-    carry += rc as i32;
-    let (rt, rc) = add_raw(&sum, &rs[9]);
-    sum = rt;
-    carry += rc as i32;
-
-    let mut part3 = [0; 8];
-    let rt: u64 = u64::from(rx[8]) + u64::from(rx[9]) + u64::from(rx[13]) + u64::from(rx[14]);
-    part3[5] = (rt & 0xffff_ffff) as u32;
-    part3[4] = (rt >> 32) as u32;
-
-    let (rt, rc) = add_raw(&sum, &rs[0]);
-    sum = rt;
-    carry += rc as i32;
-
-    let (rt, rc) = sub_raw(&sum, &part3);
-    sum = rt;
-    carry -= rc as i32;
-
-    while carry > 0 || sum >= *modulus {
-        let (rs, rb) = sub_raw(&sum, modulus);
-        sum = rs;
-        carry -= rb as i32;
-    }
-    sum
 }

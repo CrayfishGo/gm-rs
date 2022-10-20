@@ -24,14 +24,14 @@ impl Sm2PublicKey {
             let c1_p = p256_ecc::scalar_mul(&k, &P256C_PARAMS.g_point);
             let c1_p = c1_p.to_affine(); // 根据加密算法，z坐标会被丢弃，为保证解密还原回来的坐标在曲线上，则必须转换坐标系到 affine 坐标系
 
-            let s_p = p256_ecc::scalar_mul(P256C_PARAMS.h.inner(), &self.value);
+            let s_p = p256_ecc::scalar_mul(&P256C_PARAMS.h, &self.value);
             if s_p.is_zero() {
                 return Err(Sm2Error::ZeroPoint);
             }
 
             let c2_p = p256_ecc::scalar_mul(&k, &self.value).to_affine();
-            let x2_bytes = c2_p.x.inner().to_bytes_be();
-            let y2_bytes = c2_p.y.inner().to_bytes_be();
+            let x2_bytes = c2_p.x.to_bytes_be();
+            let y2_bytes = c2_p.y.to_bytes_be();
             let mut c2_append = vec![];
             c2_append.extend_from_slice(&x2_bytes);
             c2_append.extend_from_slice(&y2_bytes);
@@ -92,14 +92,14 @@ impl Sm2PrivateKey {
             return Err(Sm2Error::CheckPointErr);
         }
 
-        let s_point = p256_ecc::scalar_mul(P256C_PARAMS.h.inner(), &c1_point);
+        let s_point = p256_ecc::scalar_mul(&P256C_PARAMS.h, &c1_point);
         if s_point.is_zero() {
             return Err(Sm2Error::ZeroPoint);
         }
 
         let c2_point = p256_ecc::scalar_mul(&self.d, &c1_point).to_affine();
-        let x2_bytes = c2_point.x.inner().to_bytes_be();
-        let y2_bytes = c2_point.y.inner().to_bytes_be();
+        let x2_bytes = c2_point.x.to_bytes_be();
+        let y2_bytes = c2_point.y.to_bytes_be();
         let mut prepend: Vec<u8> = vec![];
         prepend.extend_from_slice(&x2_bytes);
         prepend.extend_from_slice(&y2_bytes);
