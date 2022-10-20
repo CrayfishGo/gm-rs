@@ -8,15 +8,26 @@ use std::io::Cursor;
 use std::ops::{Mul, Rem, Sub};
 
 use num_bigint::{BigUint, ParseBigIntError};
-use num_integer::Integer;
 use num_traits::{FromPrimitive, Num, One, Zero};
 
 use crate::sm2::error::{Sm2Error, Sm2Result};
 use crate::sm2::p256_ecc::P256C_PARAMS;
+use crate::sm2::ModOperation;
 use crate::{
     forward_ref_ref_binop, forward_ref_val_binop, forward_val_ref_binop, forward_val_val_binop,
 };
 
+/// Fp 的加法，减法，乘法并不是简单的四则运算。其运算结果的值必须在Fp的有限域中，这样保证椭圆曲线变成离散的点
+///
+/// 这里我们规定一个有限域Fp
+///
+/// * 取大质数p，则有限域中有p-1个有限元：0，1，2...p-1
+/// * Fp上的加法为模p加法`a+b≡c(mod p)`
+/// * Fp上的乘法为模p乘法`a×b≡c(mod p)`
+/// * Fp上的减法为模p减法`a-b≡c(mod p)`
+/// * Fp上的除法就是乘除数的乘法逆元`a÷b≡c(mod p)`，即 `a×b^(-1)≡c (mod p)`
+/// * Fp的乘法单位元为1，零元为0
+/// * Fp域上满足交换律，结合律，分配律
 pub struct FieldElement {
     inner: BigUint,
 }
@@ -57,7 +68,7 @@ impl FieldElement {
     pub fn sqrt(&self) -> Sm2Result<FieldElement> {
         // p = 4 * u + 3
         // u = u + 1
-        let u = FieldElement::from_str_radix(
+        let u = BigUint::from_str_radix(
             "28948022302589062189105086303505223191562588497981047863605298483322421248000",
             10,
         )
@@ -92,9 +103,9 @@ impl FieldElement {
         self.inner.is_zero()
     }
 
-    pub fn modpow(&self, exponent: &Self, modulus: &Self) -> Self {
+    pub fn modpow(&self, exponent: &BigUint, modulus: &Self) -> Self {
         FieldElement {
-            inner: self.inner.modpow(&exponent.inner, &modulus.inner),
+            inner: self.inner.modpow(&exponent, &modulus.inner),
         }
     }
     pub fn inner(&self) -> &BigUint {
@@ -104,7 +115,7 @@ impl FieldElement {
     // calculate x^(-1) mod p
     pub fn modinv(&self) -> FieldElement {
         let ecc_p = &P256C_PARAMS.p;
-        self.modpow(&(ecc_p - FieldElement::from_u32(2)), ecc_p)
+        self.modpow(&(&ecc_p.inner - BigUint::from_u32(2).unwrap()), ecc_p)
     }
 }
 
@@ -164,7 +175,7 @@ impl<'a> Add<&'a FieldElement> for FieldElement {
     type Output = FieldElement;
 
     fn add(mut self, rhs: &FieldElement) -> Self::Output {
-        self.inner = (self.inner + &rhs.inner) % &P256C_PARAMS.p.inner;
+        self.inner = self.inner.modadd(rhs.inner(), &P256C_PARAMS.p.inner);
         self
     }
 }
@@ -176,15 +187,7 @@ impl<'a> Sub<&'a FieldElement> for FieldElement {
     type Output = FieldElement;
 
     fn sub(mut self, rhs: &'a FieldElement) -> Self::Output {
-        let modulus = &P256C_PARAMS.p.inner;
-        if self.inner >= rhs.inner {
-            self.inner = (self.inner - &rhs.inner) % modulus;
-        } else {
-            // 负数取模
-            let d = &rhs.inner - self.inner;
-            let e = d.div_ceil(modulus);
-            self.inner = e * modulus - d
-        }
+        self.inner = self.inner.modsub(rhs.inner(), &P256C_PARAMS.p.inner);
         self
     }
 }
@@ -196,15 +199,8 @@ impl<'a> Mul<&'a FieldElement> for FieldElement {
     type Output = FieldElement;
 
     fn mul(mut self, rhs: &'a FieldElement) -> Self::Output {
-        self.inner = (self.inner * &rhs.inner) % &P256C_PARAMS.p.inner;
+        self.inner = self.inner.modmul(rhs.inner(), &P256C_PARAMS.p.inner);
         self
-        // let a = from_biguint(&self.inner);
-        // let b = from_biguint(&rhs.inner);
-        // let p = from_biguint(&P256C_PARAMS.p.inner);
-        // let r = mod_mul_raw(&a, &b, &p);
-        // FieldElement {
-        //     inner: to_bigunit(&r),
-        // }
     }
 }
 
@@ -212,7 +208,7 @@ impl Add<u32> for FieldElement {
     type Output = FieldElement;
 
     fn add(mut self, rhs: u32) -> Self::Output {
-        self.inner = (self.inner + rhs) % &P256C_PARAMS.p.inner;
+        self.inner = self.inner.modadd_u32(rhs, &P256C_PARAMS.p.inner);
         self
     }
 }
@@ -221,7 +217,7 @@ impl Mul<u32> for FieldElement {
     type Output = FieldElement;
 
     fn mul(mut self, rhs: u32) -> Self::Output {
-        self.inner = (self.inner * rhs) % &P256C_PARAMS.p.inner;
+        self.inner = self.inner.modmul_u32(rhs, &P256C_PARAMS.p.inner);
         self
     }
 }
@@ -231,7 +227,7 @@ impl<'a> Mul<u32> for &'a FieldElement {
 
     fn mul(self, rhs: u32) -> Self::Output {
         let mut s = self.clone();
-        s.inner = (&self.inner * rhs) % &P256C_PARAMS.p.inner;
+        s.inner = self.inner.modmul_u32(rhs, &P256C_PARAMS.p.inner);
         s
     }
 }

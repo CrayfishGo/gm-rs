@@ -1,13 +1,10 @@
-use std::io::Cursor;
-
-use byteorder::{BigEndian, ReadBytesExt};
 use lazy_static::lazy_static;
 use num_bigint::BigUint;
-use num_traits::One;
+use num_traits::{FromPrimitive, One};
 
 use crate::sm2::error::{Sm2Error, Sm2Result};
-use crate::sm2::p256_field::FieldElement;
 use crate::sm2::key::CompressModle;
+use crate::sm2::p256_field::{from_biguint, FieldElement};
 
 lazy_static! {
     pub static ref P256C_PARAMS: CurveParameters = CurveParameters::new();
@@ -69,7 +66,7 @@ impl CurveParameters {
             n,
             a,
             b,
-            h: FieldElement::from(BigUint::one()),
+            h: FieldElement::from_u32(1),
             g_point,
         };
         ctx
@@ -192,9 +189,8 @@ impl Point {
             let ecc_p = &P256C_PARAMS.p;
             let yy = &self.y * &self.y;
             let xxx = &self.x * &self.x * &self.x;
-            let axz = &P256C_PARAMS.a * &self.x * &self.z.modpow(&FieldElement::from_u32(4), ecc_p);
-
-            let bz = &P256C_PARAMS.b * &self.z.modpow(&FieldElement::from_u32(6), ecc_p);
+            let axz = &P256C_PARAMS.a * &self.x * &self.z.modpow(&BigUint::from_u32(4).unwrap(), ecc_p);
+            let bz = &P256C_PARAMS.b * &self.z.modpow(&BigUint::from_u32(6).unwrap(), ecc_p);
             let exp = &xxx + &axz + &bz;
             yy.eq(&exp)
         }
@@ -246,7 +242,6 @@ impl Point {
             y: y3,
             z: z3,
         };
-        // println!("check double point P3 = {}", p.is_valid());
         p
     }
 
@@ -311,7 +306,6 @@ impl Point {
                 y: y3,
                 z: z3,
             };
-            // println!("check add point P3 = {}", p.is_valid());
             p
         }
     }
@@ -321,24 +315,34 @@ impl Point {
 // P = [k]G
 pub fn base_mul_point(m: &BigUint, p: &Point) -> Point {
     let m = m % P256C_PARAMS.n.inner();
-    let v = m.to_bytes_be();
-    let mut num_v = [0u8; 32];
-    num_v[32 - v.len()..32].copy_from_slice(&v[..]);
-
-    let mut elem: [u32; 8] = [0; 8];
-    let mut c = Cursor::new(num_v);
-    for i in 0..8 {
-        let x = c.read_u32::<BigEndian>().unwrap();
-        elem[i] = x;
+    if m.is_one() {
+        mul_naf(&m, p)
+    } else {
+        mul_binary(&m, p)
     }
-    mul_raw_naf(&elem, p)
+}
+
+// 二进制展开法
+pub fn mul_binary(m: &BigUint, p: &Point) -> Point {
+    let mut q = Point::zero();
+    let k = m.to_bytes_be();
+    let mut j = k.len() - 1;
+    while j > 0 {
+        q = q.double();
+        if k[j] & 0x01 == 1 {
+            q = q.add(p);
+        }
+        j -= 1;
+    }
+    q
 }
 
 // 滑动窗口法
-pub fn mul_raw_naf(k: &[u32; 8], p: &Point) -> Point {
+pub fn mul_naf(m: &BigUint, p: &Point) -> Point {
+    let k = from_biguint(&m);
     let mut i = 256;
     let mut q = Point::zero();
-    let naf = w_naf(k, 5, &mut i);
+    let naf = w_naf(&k, 5, &mut i);
     let offset = 16;
     let mut table = vec![];
     for _ in 0..32 {
@@ -411,4 +415,3 @@ pub fn w_naf(k: &[u32], w: usize, lst: &mut usize) -> [i8; 257] {
     }
     ret
 }
-

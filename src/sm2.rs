@@ -1,31 +1,17 @@
-use byteorder::{BigEndian, WriteBytesExt};
 use num_bigint::BigUint;
 use num_integer::Integer;
 use num_traits::{One, Zero};
 use rand::RngCore;
 
-use crate::sm2::p256_field::FieldElement;
 use crate::sm2::p256_ecc::P256C_PARAMS;
+use crate::sm2::p256_field::FieldElement;
 use crate::sm3;
 
 pub mod error;
-pub mod p256_field;
 pub mod key;
 mod macros;
 pub mod p256_ecc;
-
-
-
-// pub(crate) fn random_hex(x: usize) -> String {
-//     let c = vec![
-//         "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "a", "b", "c", "d", "e", "f",
-//     ];
-//     let mut s: String = "".to_string();
-//     for _ in 0..x {
-//         s += *c.choose(&mut rand::thread_rng()).unwrap();
-//     }
-//     s
-// }
+pub mod p256_field;
 
 pub(crate) fn random_uint() -> BigUint {
     let n: &FieldElement = &P256C_PARAMS.n;
@@ -42,26 +28,47 @@ pub(crate) fn random_uint() -> BigUint {
     ret
 }
 
-/// A Mod B = A-(A/B)*B
+/// Fp 的加法，减法，乘法并不是简单的四则运算。其运算结果的值必须在Fp的有限域中，这样保证椭圆曲线变成离散的点
+///
+/// 这里我们规定一个有限域Fp
+///
+/// * 取大质数p，则有限域中有p-1个有限元：0，1，2...p-1
+/// * Fp上的加法为模p加法`a+b≡c(mod p)`
+/// * Fp上的乘法为模p乘法`a×b≡c(mod p)`
+/// * Fp上的减法为模p减法`a-b≡c(mod p)`
+/// * Fp上的除法就是乘除数的乘法逆元`a÷b≡c(mod p)`，即 `a×b^(-1)≡c (mod p)`
+/// * Fp的乘法单位元为1，零元为0
+/// * Fp域上满足交换律，结合律，分配律
 pub trait ModOperation {
     /// Returns `(self + other) % modulus`.
     ///
     /// Panics if the modulus is zero.
+    ///
     fn modadd(&self, other: &Self, modulus: &Self) -> BigUint;
+
+    fn modadd_u32(&self, other: u32, modulus: &Self) -> BigUint;
 
     /// Returns `(self - other) % modulus`.
     ///
     /// Panics if the modulus is zero.
+    ///
     fn modsub(&self, other: &Self, modulus: &Self) -> BigUint;
 
     /// Returns `(self * other) % modulus`.
     ///
     /// Panics if the modulus is zero.
+    ///
     fn modmul(&self, other: &Self, modulus: &Self) -> BigUint;
+
+    fn modmul_u32(&self, other: u32, modulus: &Self) -> BigUint;
 }
 
 impl ModOperation for BigUint {
     fn modadd(&self, other: &Self, modulus: &Self) -> BigUint {
+        (self + other) % modulus
+    }
+
+    fn modadd_u32(&self, other: u32, modulus: &Self) -> BigUint {
         (self + other) % modulus
     }
 
@@ -77,6 +84,10 @@ impl ModOperation for BigUint {
     }
 
     fn modmul(&self, other: &Self, modulus: &Self) -> BigUint {
+        (self * other) % modulus
+    }
+
+    fn modmul_u32(&self, other: u32, modulus: &Self) -> BigUint {
         (self * other) % modulus
     }
 }
@@ -107,3 +118,42 @@ pub fn kdf(z: &[u8], klen: usize) -> Vec<u8> {
     }
     h_a
 }
+
+pub fn quick_pow(a: &BigUint, n: &BigUint) -> BigUint {
+    let p = P256C_PARAMS.p.inner();
+    let mut ans = BigUint::one();
+    let zero = BigUint::zero();
+    let two = BigUint::new(vec![2]);
+    let mut n = n.clone();
+    let mut a = a.clone();
+    while n > zero {
+        if &n & BigUint::one() > zero {
+            // 判断二进制数的末位为0还是为1
+            ans = &ans * &a % p; //ans乘上当前的a
+        }
+        a = &a * &a % p; //a自乘
+        n = n / &two // 将二进制数右移一位，也相当于/2
+    }
+    ans
+}
+
+
+#[cfg(test)]
+mod test {
+    use crate::sm2::key::{gen_keypair, CompressModle};
+
+    #[test]
+    fn test_gen_keypair() {
+        gen_keypair(CompressModle::Compressed).unwrap();
+    }
+
+    #[test]
+    fn test_encrypt_decrypt() {
+        let (pk, sk) = gen_keypair(CompressModle::Compressed).unwrap();
+        let msg = "你好 world,asjdkajhdjadahkubbhj12893718927391873891,@@！！ world,1231 wo12321321313asdadadahello world，hello world".as_bytes();
+        let encrypt = pk.encrypt(msg).unwrap();
+        let plain = sk.decrypt(&encrypt).unwrap();
+        assert_eq!(msg, plain)
+    }
+}
+

@@ -70,8 +70,8 @@ pub struct Sm2PrivateKey {
 impl Sm2PrivateKey {
     pub fn decrypt(&self, ciphertext: &[u8]) -> Sm2Result<Vec<u8>> {
         let c1_end_index = match self.compress_modle {
-            CompressModle::Compressed => {33}
-            CompressModle::Uncompressed  | CompressModle::Mixed=> {65}
+            CompressModle::Compressed => 33,
+            CompressModle::Uncompressed | CompressModle::Mixed => 65,
         };
 
         let c1_bytes = &ciphertext[0..c1_end_index];
@@ -129,34 +129,22 @@ pub enum CompressModle {
 }
 
 /// generate key pair
-pub fn gen_keypair(compress_modle: CompressModle) -> (Sm2PublicKey, Sm2PrivateKey) {
+pub fn gen_keypair(compress_modle: CompressModle) -> Sm2Result<(Sm2PublicKey, Sm2PrivateKey)> {
     let sk = Sm2PrivateKey {
         d: random_uint(),
         compress_modle,
     };
-    (public_from_private(&sk, compress_modle), sk)
+    Ok((public_from_private(&sk, compress_modle)?, sk))
 }
 
-fn public_from_private(sk: &Sm2PrivateKey, compress_modle: CompressModle) -> Sm2PublicKey {
+fn public_from_private(
+    sk: &Sm2PrivateKey,
+    compress_modle: CompressModle,
+) -> Sm2Result<Sm2PublicKey> {
     let p = p256_ecc::base_mul_point(&sk.d, &P256C_PARAMS.g_point);
-    println!("Check public_key point = {}", p.is_valid());
-    Sm2PublicKey { p, compress_modle }
-}
-
-#[cfg(test)]
-mod test {
-    use crate::sm2::key::{CompressModle, gen_keypair};
-
-    #[test]
-    fn test_gen_keypair() {
-        let (pk, sk) = gen_keypair(CompressModle::Compressed);
-        println!("sk={}", format!("{:x}", &sk.d));
-
-        let msg = "你好 world,asjdkajhdjadahkubbhj12893718927391873891,@@！！ world,1231 wo12321321313asdadadahello world，hello world".as_bytes();
-        let encrypt = pk.encrypt(msg).unwrap();
-        let plain = sk.decrypt(&encrypt).unwrap();
-        let s = String::from_utf8_lossy(&plain);
-        println!("plain = {}", s);
-        assert_eq!(msg, plain)
+    if p.is_valid() {
+        Ok(Sm2PublicKey { p, compress_modle })
+    } else {
+        Err(Sm2Error::InvalidPublic)
     }
 }

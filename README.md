@@ -7,7 +7,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-gm-rs = "0.2.1"
+gm-rs = "0.3.1"
 ```
 
 ## Example
@@ -24,3 +24,20 @@ fn main() {
 }
 
 ```
+
+### SM2:
+
+#### encrypt & decrypt
+```rust
+ use crate::sm2::key::{gen_keypair, CompressModle};
+
+ fn main(){
+    let (pk, sk) = gen_keypair(CompressModle::Compressed).unwrap();
+    let msg = "你好 world,asjdkajhdjadahkubbhj12893718927391873891,@@！！ world,1231 wo12321321313asdadadahello world，hello world".as_bytes();
+    let encrypt = pk.encrypt(msg).unwrap();
+    let plain = sk.decrypt(&encrypt).unwrap();
+    assert_eq!(msg, plain)
+}
+
+```
+
