@@ -296,21 +296,13 @@ impl Point {
         let yy = y1.square();
         let zz = z1.square();
 
-        // let yyyy = &yy.square();
-        // let s = ((x1 + &yy).square() - &xx - yyyy) * 2;
-        // let m = &xx * 3 + ecc_a * &zz.square();
-        // let t = &m.square() - &s * 2;
-        // let y3 = &m * (&s - &t) - yyyy * 8;
-        // let x3 = t;
-        // let z3 = (y1 + z1).square() - &yy - &zz;
-
-        let lambda1 = &xx * 3 + ecc_a * (&zz.square());
-        let lambda2 = x1 * 4 * &yy;
-        let lambda3 = &yy.square() * 8;
-        let x3 = &lambda1.square() - &lambda2 * 2;
-        let y3 = &lambda1 * (&lambda2 - &x3) - &lambda3;
-        let z3 = y1 * 2 * z1;
-
+        let yyyy = &yy.square();
+        let s = ((x1 + &yy).square() - &xx - yyyy).double();
+        let m = &xx.double() + &xx + ecc_a * &zz.square();
+        let t = &m.square() - &s.double();
+        let y3 = &m * (&s - &t) - yyyy.double().double().double();
+        let x3 = t;
+        let z3 = (y1 + z1).square() - &yy - &zz;
         let p = Point {
             x: x3,
             y: y3,
@@ -319,12 +311,11 @@ impl Point {
         p
     }
 
-    /// see GMT 0003.1-2012
+    /// see https://hyperelliptic.org/EFD/g1p/auto-shortw-jacobian.html#addition-add-1998-cmo-2
     ///
-    /// A.1.2.3.2  Jacobian 加重射影坐标
-    /// The "add-2007-bl" addition formulas
+    /// The "add-1998-cmo-2" addition formulas
     ///
-    /// Cost: 11M + 5S + 9add + 4*2.
+    /// Cost: 12M + 4S + 6add + 1*2.
     //       Z1Z1 = Z12
     //       Z2Z2 = Z22
     //       U1 = X1*Z2Z2
@@ -332,13 +323,13 @@ impl Point {
     //       S1 = Y1*Z2*Z2Z2
     //       S2 = Y2*Z1*Z1Z1
     //       H = U2-U1
-    //       I = (2*H)2
-    //       J = H*I
-    //       r = 2*(S2-S1)
-    //       V = U1*I
-    //       X3 = r2-J-2*V
-    //       Y3 = r*(V-X3)-2*S1*J
-    //       Z3 = ((Z1+Z2)2-Z1Z1-Z2Z2)*H
+    //       HH = H2
+    //       HHH = H*HH
+    //       r = S2-S1
+    //       V = U1*HH
+    //       X3 = r2-HHH-2*V
+    //       Y3 = r*(V-X3)-S1*HHH
+    //       Z3 = Z1*Z2*H
     pub fn add(&self, p2: &Point) -> Point {
         // 0 + p2 = p2
         if self.is_zero() {
@@ -367,21 +358,21 @@ impl Point {
             let s2 = y2 * z1 * &z1z1;
             let h = &u2 - &u1;
 
-            let i = (&h * 2).square();
-            let j = &h * &i;
-            let r = (&s2 - &s1) * 2;
-            let v = &u1 * &i;
-            let x3 = &r.square() - &j - &v * 2;
-            let y3 = &r * (&v - &x3) - &s1 * &j * 2;
-            let z3 = &h * ((z1 + z2).square() - &z1z1 - z2z2);
+            // let i = h.double().square();
+            // let j = &h * &i;
+            // let r = (&s2 - &s1).double();
+            // let v = &u1 * &i;
+            // let x3 = &r.square() - &j - &v.double();
+            // let y3 = &r * (&v - &x3) - &s1 * &j.double();
+            // let z3 = &h * ((z1 + z2).square() - &z1z1 - z2z2);
 
-            // let r = &s2 - &s1;
-            // let hh = &h * &h;
-            // let hhh = &h * &hh;
-            // let v = &u1 * &hh;
-            // let x3 = &r * &r - &hhh - &v * 2;
-            // let y3 = &r * (&v - &x3) - &s1 * &hhh;
-            // let z3 = z1 * z2 * &h;
+            let r = &s2 - &s1;
+            let hh = h.square();
+            let hhh = &h * &hh;
+            let v = &u1 * &hh;
+            let x3 = &r.square() - &hhh - &v.double();
+            let y3 = &r * (&v - &x3) - &s1 * &hhh;
+            let z3 = z1 * z2 * &h;
 
             let p = Point {
                 x: x3,

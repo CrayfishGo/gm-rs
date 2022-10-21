@@ -1,6 +1,5 @@
 use byteorder::{BigEndian, WriteBytesExt};
 use num_bigint::BigUint;
-use num_integer::Integer;
 use num_traits::{FromPrimitive, One, Zero};
 
 use crate::sm2::error::{Sm2Error, Sm2Result};
@@ -18,7 +17,7 @@ pub struct Signature {
 
 /// 生成签名
 ///
-pub(crate) fn sign(
+pub fn sign(
     id: Option<&'static str>,
     msg: &[u8],
     sk: &BigUint,
@@ -32,7 +31,7 @@ pub(crate) fn sign(
     sign_raw(&digest[..], sk)
 }
 
-pub(crate) fn e_hash(id: &str, pk: &Sm2PublicKey, msg: &[u8]) -> Sm2Result<[u8; 32]> {
+pub fn e_hash(id: &str, pk: &Sm2PublicKey, msg: &[u8]) -> Sm2Result<[u8; 32]> {
     if !pk.is_valid() {
         return Err(Sm2Error::InvalidPublic);
     }
@@ -88,59 +87,6 @@ fn sign_raw(digest: &[u8], sk: &BigUint) -> Sm2Result<Signature> {
         }
         return Ok(Signature { r, s });
     }
-}
-
-// Extended Eulidean Algorithm(EEA) to calculate x^(-1) mod p
-// Reference:
-// http://delta.cs.cinvestav.mx/~francisco/arith/julio.pdf
-pub fn inv_n(x: &BigUint) -> Sm2Result<BigUint> {
-    if *x == BigUint::zero() {
-        return Err(Sm2Error::ZeroDivisor);
-    }
-    let n = &P256C_PARAMS.n;
-    let mut ru = x.clone();
-    let mut rv = n.clone();
-    let mut ra = BigUint::one();
-    let mut rc = BigUint::zero();
-
-    let rn = n.clone();
-
-    while ru != BigUint::zero() {
-        if ru.is_even() {
-            ru >>= 1;
-            if ra.is_even() {
-                ra >>= 1;
-            } else {
-                ra = (ra + &rn) >> 1;
-            }
-        }
-
-        if rv.is_even() {
-            rv >>= 1;
-            if rc.is_even() {
-                rc >>= 1;
-            } else {
-                rc = (rc + &rn) >> 1;
-            }
-        }
-
-        if ru >= rv {
-            ru -= &rv;
-            if ra >= rc {
-                ra -= &rc;
-            } else {
-                ra = ra + &rn - &rc;
-            }
-        } else {
-            rv -= &ru;
-            if rc >= ra {
-                rc -= &ra;
-            } else {
-                rc = rc + &rn - &ra;
-            }
-        }
-    }
-    Ok(rc)
 }
 
 impl Signature {

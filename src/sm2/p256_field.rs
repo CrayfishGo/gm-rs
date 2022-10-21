@@ -143,6 +143,10 @@ impl FieldElement {
         self.clone() * self.clone()
     }
 
+    pub fn double(&self) -> FieldElement {
+        self.clone() + self.clone()
+    }
+
     pub fn modpow(&self, exponent: &BigUint) -> Self {
         let u = FieldElement::from_biguint(exponent).unwrap();
 
@@ -339,7 +343,7 @@ impl FieldElement {
     // a quick algorithm to reduce elements on SCA-256 field
     // Reference:
     // http://ieeexplore.ieee.org/document/7285166/ for details
-    #[inline]
+    #[inline(always)]
     fn fast_reduction(&self, input: &[u32; 16], modulus: &[u32; 8]) -> [u32; 8] {
         let mut rs: [[u32; 8]; 10] = [[0; 8]; 10];
         let mut rx: [u32; 16] = [0; 16];

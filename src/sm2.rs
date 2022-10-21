@@ -61,6 +61,9 @@ pub trait ModOperation {
     fn modmul(&self, other: &Self, modulus: &Self) -> BigUint;
 
     fn modmul_u32(&self, other: u32, modulus: &Self) -> BigUint;
+
+    /// Extended Eulidean Algorithm(EEA) to calculate x^(-1) mod p
+    fn inv(&self, modulus: &Self) -> BigUint;
 }
 
 impl ModOperation for BigUint {
@@ -89,6 +92,50 @@ impl ModOperation for BigUint {
 
     fn modmul_u32(&self, other: u32, modulus: &Self) -> BigUint {
         (self * other) % modulus
+    }
+
+    fn inv(&self, modulus: &Self) -> BigUint {
+        let mut ru = self.clone();
+        let mut rv = modulus.clone();
+        let mut ra = BigUint::one();
+        let mut rc = BigUint::zero();
+        let rn = modulus.clone();
+        while ru != BigUint::zero() {
+            if ru.is_even() {
+                ru >>= 1;
+                if ra.is_even() {
+                    ra >>= 1;
+                } else {
+                    ra = (ra + &rn) >> 1;
+                }
+            }
+
+            if rv.is_even() {
+                rv >>= 1;
+                if rc.is_even() {
+                    rc >>= 1;
+                } else {
+                    rc = (rc + &rn) >> 1;
+                }
+            }
+
+            if ru >= rv {
+                ru -= &rv;
+                if ra >= rc {
+                    ra -= &rc;
+                } else {
+                    ra = ra + &rn - &rc;
+                }
+            } else {
+                rv -= &ru;
+                if rc >= ra {
+                    rc -= &ra;
+                } else {
+                    rc = rc + &rn - &ra;
+                }
+            }
+        }
+        rc
     }
 }
 
