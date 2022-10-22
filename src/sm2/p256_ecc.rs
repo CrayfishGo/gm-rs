@@ -1,10 +1,10 @@
 use lazy_static::lazy_static;
 use num_bigint::BigUint;
-use num_traits::{FromPrimitive, Num, One};
+use num_traits::{Num, One};
 
 use crate::sm2::error::{Sm2Error, Sm2Result};
 use crate::sm2::key::CompressModle;
-use crate::sm2::p256_field::FieldElement;
+use crate::sm2::p256_field::{ECC_P, FieldElement};
 
 lazy_static! {
     pub static ref P256C_PARAMS: CurveParameters = CurveParameters::new_default();
@@ -31,6 +31,30 @@ pub struct CurveParameters {
 
     /// G：椭圆曲线的一个基点，其阶为素数
     pub g_point: Point,
+
+    // r modp
+    // pub r_p: BigUint,
+
+    // r^2 modn
+    // pub rr_n: BigUint,
+
+    // r^2 modn
+    // pub rr_p: BigUint,
+    /// r^-1 modp
+    pub r_inv: BigUint,
+
+    // Calculate the modular inverse of scalar |a| using Fermat's Little
+    // Theorem:
+    //
+    //    a**-1 (mod n) == a**(n - 2) (mod n)
+    // so, p_inv_r_neg == -p^-1 modr, ps. p^-1 = p^(r-2) modr
+    pub p_inv_r_neg: BigUint,
+
+    // like p_inv_r_neg, n_inv_r_neg == -n^-1 modr, ps. n^-1 = n^(r-2) modr
+    pub n_inv_r_neg: BigUint,
+
+    /// r = 2 ^256
+    pub r: BigUint,
 }
 
 impl Default for CurveParameters {
@@ -53,16 +77,7 @@ impl CurveParameters {
     }
 
     pub fn new_default() -> CurveParameters {
-        let p = FieldElement::new([
-            0xffff_fffe,
-            0xffff_ffff,
-            0xffff_ffff,
-            0xffff_ffff,
-            0xffff_ffff,
-            0x0000_0000,
-            0xffff_ffff,
-            0xffff_ffff,
-        ]);
+        let p = FieldElement::new(ECC_P);
         let n = BigUint::from_str_radix(
             "FFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFF7203DF6B21C6052B53BBF40939D54123",
             16,
@@ -110,6 +125,16 @@ impl CurveParameters {
             0x2139_f0a0,
         ]);
 
+        let r = BigUint::from_bytes_be(
+            &hex::decode("010000000000000000000000000000000000000000000000000000000000000000")
+                .unwrap(),
+        );
+
+        let r_inv = BigUint::from_bytes_be(
+            &hex::decode("fffffffb00000005fffffffc00000002fffffffd00000006fffffff900000004")
+                .unwrap(),
+        );
+
         let ctx = CurveParameters {
             p,
             n,
@@ -121,18 +146,28 @@ impl CurveParameters {
                 y: g_y,
                 z: FieldElement::one(),
             },
+            r_inv,
+            p_inv_r_neg: BigUint::from_bytes_be(
+                &hex::decode("fffffffc00000001fffffffe00000000ffffffff000000010000000000000001")
+                    .unwrap(),
+            ),
+            n_inv_r_neg: BigUint::from_bytes_be(
+                &hex::decode("6f39132f82e4c7bc2b0068d3b08941d4df1e8d34fc8319a5327f9e8872350975")
+                    .unwrap(),
+            ),
+            r,
         };
         ctx
     }
 }
 
-#[derive(Debug, Clone, Hash, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub enum PointModel {
     AFFINE,
     JACOBIAN,
 }
 
-#[derive(Debug, Clone, Hash, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Point {
     pub x: FieldElement,
     pub y: FieldElement,
@@ -142,8 +177,10 @@ pub struct Point {
 impl Point {
     pub fn to_affine(&self) -> Point {
         let z_inv = &self.z.modinv();
-        let x = &self.x * (z_inv * z_inv);
-        let y = &self.y * (z_inv * z_inv * z_inv);
+        let z_inv2 = z_inv * z_inv;
+        let z_inv3 = z_inv2 * z_inv;
+        let x = &self.x * z_inv2;
+        let y = &self.y * z_inv3;
         Point {
             x,
             y,
@@ -238,23 +275,29 @@ impl Point {
         if self.is_zero() {
             true
         } else {
-            // y^2 = x^3 + a * x * z^4 + b * z^6
+            // y^2 = x * (x^2 + a * z^4) + b * z^6
             let yy = &self.y * &self.y;
-            let xxx = &self.x * &self.x * &self.x;
-            let axz = &P256C_PARAMS.a * &self.x * &self.z.modpow(&BigUint::from_u32(4).unwrap());
-            let bz = &P256C_PARAMS.b * &self.z.modpow(&BigUint::from_u32(6).unwrap());
-            let exp = &xxx + &axz + &bz;
+            let xx = &self.x * &self.x;
+            let z2 = &self.z * &self.z;
+            let z4 = &z2 * &z2;
+            let z6 = &z4 * &z2;
+            let z6_b = &P256C_PARAMS.b * &z6;
+            let a_z4 = &P256C_PARAMS.a * &z4;
+            let xx_a_4z = &xx + &a_z4;
+            let xxx_a_4z = &xx_a_4z * &self.x;
+            let exp = &xxx_a_4z + &z6_b;
             yy.eq(&exp)
         }
     }
 
     pub fn is_valid_affine(&self) -> bool {
-        // y^2 = x^3 + a * x + b
+        // y^2 = x * (x^2 + a) + b
         let yy = &self.y * &self.y;
-        let xxx = &self.x * &self.x * &self.x;
-        let ax = &P256C_PARAMS.a * &self.x;
+        let xx = &self.x * &self.x;
+        let xx_a = &P256C_PARAMS.a + &xx;
+        let xxx_a = &self.x * &xx_a;
         let b = &P256C_PARAMS.b;
-        let exp = &xxx + &ax + b;
+        let exp = &xxx_a + b;
         yy.eq(&exp)
     }
 
@@ -399,15 +442,26 @@ pub fn scalar_mul(m: &BigUint, p: &Point) -> Point {
 // todo fix 会导致签名验证失败 -- 待修复
 pub fn mul_binary(m: &BigUint, p: &Point) -> Point {
     let mut q = Point::zero();
+    let mut order = p.clone();
     let k = m.to_bytes_be();
-    let mut j = k.len() - 1;
-    while j > 0 {
-        q = q.double();
-        if k[j] & 0x01 == 1 {
-            q = q.add(p);
+    for k_j in k {
+        let mut bit: usize = 0;
+        while bit < 8 {
+            if (k_j >> bit) & 0x01 != 0 {
+                q = q.add(&order);
+            }
+            order = order.double();
+            bit += 1;
         }
-        j -= 1;
     }
+    // let mut j = k.len() - 1;
+    // while j > 0 {
+    //     q = q.double();
+    //     if k[j] & 0x01 == 1 {
+    //         q = q.add(p);
+    //     }
+    //     j -= 1;
+    // }
     q
 }
 
@@ -420,16 +474,16 @@ pub fn mul_naf(m: &BigUint, p: &Point) -> Point {
     // 预处理计算
     let p1 = p.clone();
     let p2 = p.double();
-    let mut table = vec![];
+    let mut pre_table = vec![];
     for _ in 0..32 {
-        table.push(Point::zero());
+        pre_table.push(Point::zero());
     }
     let offset = 16;
-    table[1 + offset] = p1;
-    table[offset - 1] = table[1 + offset].neg();
+    pre_table[1 + offset] = p1;
+    pre_table[offset - 1] = pre_table[1 + offset].neg();
     for i in 1..8 {
-        table[2 * i + offset + 1] = p2.add(&table[2 * i + offset - 1]);
-        table[offset - 2 * i - 1] = table[2 * i + offset + 1].neg();
+        pre_table[2 * i + offset + 1] = p2.add(&pre_table[2 * i + offset - 1]);
+        pre_table[offset - 2 * i - 1] = pre_table[2 * i + offset + 1].neg();
     }
 
     // 主循环
@@ -438,7 +492,7 @@ pub fn mul_naf(m: &BigUint, p: &Point) -> Point {
         q = q.double();
         if naf[l] != 0 {
             let index = (naf[l] + 16) as usize;
-            q = q.add(&table[index]);
+            q = q.add(&pre_table[index]);
         }
         if l == 0 {
             break;
@@ -449,7 +503,6 @@ pub fn mul_naf(m: &BigUint, p: &Point) -> Point {
 }
 
 //w-naf algorithm
-//See https://crypto.stackexchange.com/questions/82013/simple-explanation-of-sliding-window-and-wnaf-methods-of-elliptic-curve-point-mu
 pub fn w_naf(k: &[u32], w: usize, lst: &mut usize) -> [i8; 257] {
     let mut carry = 0;
     let mut bit = 0;

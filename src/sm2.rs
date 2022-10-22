@@ -1,5 +1,4 @@
 use num_bigint::BigUint;
-use num_integer::Integer;
 use num_traits::{One, Zero};
 use rand::RngCore;
 
@@ -9,6 +8,7 @@ use crate::sm3;
 pub mod error;
 pub mod key;
 mod macros;
+mod operation;
 pub mod p256_ecc;
 pub mod p256_field;
 pub mod signature;
@@ -39,104 +39,34 @@ pub(crate) fn random_uint() -> BigUint {
 /// * Fp上的除法就是乘除数的乘法逆元`a÷b≡c(mod p)`，即 `a×b^(-1)≡c (mod p)`
 /// * Fp的乘法单位元为1，零元为0
 /// * Fp域上满足交换律，结合律，分配律
-pub trait ModOperation {
+pub trait FeOperation {
     /// Returns `(self + other) % modulus`.
     ///
     /// Panics if the modulus is zero.
     ///
-    fn modadd(&self, other: &Self, modulus: &Self) -> BigUint;
+    fn mod_add(&self, other: &Self, modulus: &Self) -> Self;
 
-    fn modadd_u32(&self, other: u32, modulus: &Self) -> BigUint;
+    fn mod_add_number(&self, other: u64, modulus: &Self) -> Self;
 
     /// Returns `(self - other) % modulus`.
     ///
     /// Panics if the modulus is zero.
     ///
-    fn modsub(&self, other: &Self, modulus: &Self) -> BigUint;
+    fn mod_sub(&self, other: &Self, modulus: &Self) -> Self;
 
     /// Returns `(self * other) % modulus`.
     ///
     /// Panics if the modulus is zero.
     ///
-    fn modmul(&self, other: &Self, modulus: &Self) -> BigUint;
+    fn mod_mul(&self, other: &Self, modulus: &Self) -> Self;
 
-    fn modmul_u32(&self, other: u32, modulus: &Self) -> BigUint;
+    fn mod_mul_number(&self, other: u64, modulus: &Self) -> Self;
 
     /// Extended Eulidean Algorithm(EEA) to calculate x^(-1) mod p
-    fn inv(&self, modulus: &Self) -> BigUint;
-}
+    fn inv(&self, modulus: &Self) -> Self;
 
-impl ModOperation for BigUint {
-    fn modadd(&self, other: &Self, modulus: &Self) -> BigUint {
-        (self + other) % modulus
-    }
-
-    fn modadd_u32(&self, other: u32, modulus: &Self) -> BigUint {
-        (self + other) % modulus
-    }
-
-    fn modsub(&self, other: &Self, modulus: &Self) -> BigUint {
-        if self >= other {
-            (self - other) % modulus
-        } else {
-            // 负数取模
-            let d = other - self;
-            let e = d.div_ceil(modulus);
-            e * modulus - d
-        }
-    }
-
-    fn modmul(&self, other: &Self, modulus: &Self) -> BigUint {
-        (self * other) % modulus
-    }
-
-    fn modmul_u32(&self, other: u32, modulus: &Self) -> BigUint {
-        (self * other) % modulus
-    }
-
-    fn inv(&self, modulus: &Self) -> BigUint {
-        let mut ru = self.clone();
-        let mut rv = modulus.clone();
-        let mut ra = BigUint::one();
-        let mut rc = BigUint::zero();
-        let rn = modulus.clone();
-        while ru != BigUint::zero() {
-            if ru.is_even() {
-                ru >>= 1;
-                if ra.is_even() {
-                    ra >>= 1;
-                } else {
-                    ra = (ra + &rn) >> 1;
-                }
-            }
-
-            if rv.is_even() {
-                rv >>= 1;
-                if rc.is_even() {
-                    rc >>= 1;
-                } else {
-                    rc = (rc + &rn) >> 1;
-                }
-            }
-
-            if ru >= rv {
-                ru -= &rv;
-                if ra >= rc {
-                    ra -= &rc;
-                } else {
-                    ra = ra + &rn - &rc;
-                }
-            } else {
-                rv -= &ru;
-                if rc >= ra {
-                    rc -= &ra;
-                } else {
-                    rc = rc + &rn - &ra;
-                }
-            }
-        }
-        rc
-    }
+    /// Self >>= carry
+    fn right_shift(&self, carry: u32) -> Self;
 }
 
 pub fn kdf(z: &[u8], klen: usize) -> Vec<u8> {

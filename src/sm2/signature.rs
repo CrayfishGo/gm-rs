@@ -5,7 +5,7 @@ use num_traits::{FromPrimitive, One, Zero};
 use crate::sm2::error::{Sm2Error, Sm2Result};
 use crate::sm2::key::Sm2PublicKey;
 use crate::sm2::p256_ecc::P256C_PARAMS;
-use crate::sm2::{p256_ecc, random_uint, ModOperation};
+use crate::sm2::{p256_ecc, random_uint, FeOperation};
 use crate::sm3::sm3_hash;
 
 const DEFAULT_ID: &'static str = "1234567812345678";
@@ -77,10 +77,10 @@ fn sign_raw(digest: &[u8], sk: &BigUint) -> Sm2Result<Signature> {
 
         let s1 = &(BigUint::one() + sk).modpow(&(n - BigUint::from_u32(2).unwrap()), n);
 
-        let s2_1 = &r.modmul(&sk, n);
-        let s2 = k.modsub(s2_1, n);
+        let s2_1 = r.mod_mul(&sk, n);
+        let s2 = k.mod_sub(&s2_1, n);
 
-        let s = s1.modmul(&s2, n);
+        let s = s1.mod_mul(&s2, n);
 
         if s.is_zero() {
             return Err(Sm2Error::ZeroSig);
@@ -111,7 +111,6 @@ impl Signature {
             return Err(Sm2Error::InvalidDigestLen);
         }
         let n = &P256C_PARAMS.n;
-        let e = BigUint::from_bytes_be(digest);
         let r = &self.r;
         let s = &self.s;
         if r.is_zero() || s.is_zero() {
@@ -122,7 +121,7 @@ impl Signature {
             return Ok(false);
         }
 
-        let t = s.modadd(r, n);
+        let t = s.mod_add(r, n);
         if t.is_zero() {
             return Ok(false);
         }
@@ -132,7 +131,8 @@ impl Signature {
 
         let p = s_g.add(&t_p).to_affine();
         let x1 = BigUint::from_bytes_be(&p.x.to_bytes_be());
-        let r1 = x1.modadd(&e, n);
+        let e = BigUint::from_bytes_be(digest);
+        let r1 = x1.mod_add(&e, n);
         Ok(&r1 == r)
     }
 }
