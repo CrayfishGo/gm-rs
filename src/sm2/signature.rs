@@ -1,14 +1,12 @@
-use byteorder::{BigEndian, WriteBytesExt};
 use num_bigint::BigUint;
 use num_traits::{FromPrimitive, One, Zero};
 
 use crate::sm2::error::{Sm2Error, Sm2Result};
 use crate::sm2::key::Sm2PublicKey;
 use crate::sm2::p256_ecc::P256C_PARAMS;
-use crate::sm2::{p256_ecc, random_uint, FeOperation};
+use crate::sm2::{p256_ecc, FeOperation};
+use crate::sm2::util::{compute_za, DEFAULT_ID, random_uint};
 use crate::sm3::sm3_hash;
-
-const DEFAULT_ID: &'static str = "1234567812345678";
 
 pub struct Signature {
     r: BigUint,
@@ -27,38 +25,12 @@ pub fn sign(
         None => DEFAULT_ID,
         Some(u_id) => u_id,
     };
-    let digest = e_hash(id, &pk, msg)?;
+    let mut digest = compute_za(id, &pk)?;
+    digest = sm3_hash(&[digest.to_vec(), msg.to_vec()].concat());
     sign_raw(&digest[..], sk)
 }
 
-pub fn e_hash(id: &str, pk: &Sm2PublicKey, msg: &[u8]) -> Sm2Result<[u8; 32]> {
-    if !pk.is_valid() {
-        return Err(Sm2Error::InvalidPublic);
-    }
-    let mut prepend: Vec<u8> = Vec::new();
-    if id.len() * 8 > 65535 {
-        return Err(Sm2Error::IdTooLong);
-    }
-    prepend
-        .write_u16::<BigEndian>((id.len() * 8) as u16)
-        .unwrap();
-    for c in id.bytes() {
-        prepend.push(c);
-    }
 
-    prepend.extend_from_slice(&P256C_PARAMS.a.to_bytes_be());
-    prepend.extend_from_slice(&P256C_PARAMS.b.to_bytes_be());
-    prepend.extend_from_slice(&P256C_PARAMS.g_point.x.to_bytes_be());
-    prepend.extend_from_slice(&P256C_PARAMS.g_point.y.to_bytes_be());
-
-    let pk_affine = pk.value().to_affine();
-    prepend.extend_from_slice(&pk_affine.x.to_bytes_be());
-    prepend.extend_from_slice(&pk_affine.y.to_bytes_be());
-
-    let za = sm3_hash(&prepend);
-
-    Ok(sm3_hash(&[za.to_vec(), msg.to_vec()].concat()))
-}
 
 fn sign_raw(digest: &[u8], sk: &BigUint) -> Sm2Result<Signature> {
     if digest.len() != 32 {
@@ -102,7 +74,8 @@ impl Signature {
             None => DEFAULT_ID,
             Some(u_id) => u_id,
         };
-        let digest = e_hash(id, pk, msg)?;
+        let mut digest = compute_za(id, &pk)?;
+        digest = sm3_hash(&[digest.to_vec(), msg.to_vec()].concat());
         self.verify_raw(&digest[..], pk)
     }
 

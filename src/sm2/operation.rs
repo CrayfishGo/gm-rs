@@ -73,13 +73,6 @@ impl FeOperation for Fe {
         fast_reduction(&raw_prod, &modulus)
     }
 
-    fn mod_mul_number(&self, other: u64, modulus: &Self) -> Self {
-        let mut arr: [u32; 8] = [0; 8];
-        arr[7] = (other & 0xffff_ffff) as u32;
-        arr[6] = (other >> 32) as u32;
-        self.mod_mul(&arr, modulus)
-    }
-
     fn inv(&self, modulus: &Self) -> Self {
         let mut ru = *self;
         let mut rv = *modulus;
@@ -317,10 +310,6 @@ impl FeOperation for BigUint {
     }
 
     fn mod_mul(&self, other: &Self, modulus: &Self) -> BigUint {
-        (self * other) % modulus
-    }
-
-    fn mod_mul_number(&self, other: u64, modulus: &Self) -> BigUint {
         (self * other) % modulus
     }
 

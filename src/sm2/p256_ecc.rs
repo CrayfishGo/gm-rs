@@ -167,7 +167,7 @@ pub enum PointModel {
     JACOBIAN,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Copy)]
 pub struct Point {
     pub x: FieldElement,
     pub y: FieldElement,

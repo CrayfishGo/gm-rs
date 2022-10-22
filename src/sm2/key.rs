@@ -1,11 +1,12 @@
 use num_bigint::BigUint;
 
 use crate::sm2::error::{Sm2Error, Sm2Result};
+use crate::sm2::p256_ecc;
 use crate::sm2::p256_ecc::{Point, P256C_PARAMS};
-use crate::sm2::{kdf, p256_ecc, random_uint};
+use crate::sm2::util::{kdf, random_uint};
 use crate::sm3::sm3_hash;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct Sm2PublicKey {
     value: Point,
     compress_modle: CompressModle,
