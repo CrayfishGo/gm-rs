@@ -13,8 +13,7 @@ pub struct Sm2PublicKey {
 }
 
 impl Sm2PublicKey {
-
-    pub fn is_valid(&self) -> bool{
+    pub fn is_valid(&self) -> bool {
         self.value.is_valid()
     }
 
@@ -63,7 +62,11 @@ impl Sm2PublicKey {
     }
 
     pub fn to_str_hex(&self) -> String {
-        format!("{}{}", self.value.x.to_str_radix(16), self.value.y.to_str_radix(16))
+        format!(
+            "{}{}",
+            self.value.x.to_str_radix(16),
+            self.value.y.to_str_radix(16)
+        )
     }
     pub fn value(&self) -> &Point {
         &self.value
@@ -72,8 +75,8 @@ impl Sm2PublicKey {
 
 #[derive(Debug, Clone)]
 pub struct Sm2PrivateKey {
-    pub(crate) d: BigUint,
-    pub(crate) compress_modle: CompressModle,
+    pub d: BigUint,
+    pub compress_modle: CompressModle,
 }
 
 impl Sm2PrivateKey {
@@ -152,7 +155,10 @@ fn public_from_private(
 ) -> Sm2Result<Sm2PublicKey> {
     let p = p256_ecc::scalar_mul(&sk.d, &P256C_PARAMS.g_point);
     if p.is_valid() {
-        Ok(Sm2PublicKey { value: p, compress_modle })
+        Ok(Sm2PublicKey {
+            value: p,
+            compress_modle,
+        })
     } else {
         Err(Sm2Error::InvalidPublic)
     }
