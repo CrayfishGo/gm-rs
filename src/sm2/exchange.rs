@@ -1,6 +1,6 @@
 use crate::sm2::error::{Sm2Error, Sm2Result};
 use crate::sm2::key::{Sm2PrivateKey, Sm2PublicKey};
-use crate::sm2::p256_ecc::{scalar_mul, Point, P256C_PARAMS};
+use crate::sm2::p256_ecc::{scalar_mul, Point, P256C_PARAMS, g_mul};
 use crate::sm2::util::{compute_za, kdf, random_uint, DEFAULT_ID};
 use crate::sm3::sm3_hash;
 use byteorder::{BigEndian, WriteBytesExt};
@@ -56,7 +56,7 @@ impl Exchange {
     // A3：将RA发送给用户B；
     pub fn exchange_1(&mut self) -> Sm2Result<Point> {
         let r = random_uint();
-        let r_point = scalar_mul(&r, &P256C_PARAMS.g_point);
+        let r_point = g_mul(&r);
         self.r = Some(r);
         self.r_point = Some(r_point);
         Ok(r_point)
@@ -73,7 +73,7 @@ impl Exchange {
         let pow_w = BigUint::from_u32(2).unwrap().pow(w as u32);
 
         let r2 = random_uint();
-        let r2_point = scalar_mul(&r2, &P256C_PARAMS.g_point);
+        let r2_point = g_mul(&r2);
         self.r = Some(r2);
         self.r_point = Some(r2_point);
         let r2_point_affine = r2_point.to_affine();

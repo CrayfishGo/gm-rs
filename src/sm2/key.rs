@@ -21,7 +21,7 @@ impl Sm2PublicKey {
         loop {
             let klen = msg.len();
             let k = random_uint();
-            let c1_p = p256_ecc::scalar_mul(&k, &P256C_PARAMS.g_point);
+            let c1_p = p256_ecc::g_mul(&k);
             let c1_p = c1_p.to_affine(); // 根据加密算法，z坐标会被丢弃，为保证解密还原回来的坐标在曲线上，则必须转换坐标系到 affine 坐标系
 
             let s_p = p256_ecc::scalar_mul(&P256C_PARAMS.h, &self.value);
@@ -153,7 +153,7 @@ fn public_from_private(
     sk: &Sm2PrivateKey,
     compress_modle: CompressModle,
 ) -> Sm2Result<Sm2PublicKey> {
-    let p = p256_ecc::scalar_mul(&sk.d, &P256C_PARAMS.g_point);
+    let p = p256_ecc::g_mul(&sk.d);
     if p.is_valid() {
         Ok(Sm2PublicKey {
             value: p,

@@ -40,7 +40,7 @@ fn sign_raw(digest: &[u8], sk: &BigUint) -> Sm2Result<Signature> {
     let n = &P256C_PARAMS.n;
     loop {
         let k = random_uint();
-        let p_x = p256_ecc::scalar_mul(&k, &P256C_PARAMS.g_point).to_affine();
+        let p_x = p256_ecc::g_mul(&k).to_affine();
         let x1 = BigUint::from_bytes_be(&p_x.x.to_bytes_be());
         let r = (&e + x1) % n;
         if r.is_zero() || &r + &k == *n {
@@ -99,7 +99,7 @@ impl Signature {
             return Ok(false);
         }
 
-        let s_g = p256_ecc::scalar_mul(&s, &P256C_PARAMS.g_point);
+        let s_g = p256_ecc::g_mul(&s);
         let t_p = p256_ecc::scalar_mul(&t, &pk.value());
 
         let p = s_g.add(&t_p).to_affine();

@@ -4,7 +4,8 @@ use num_traits::{Num, One};
 
 use crate::sm2::error::{Sm2Error, Sm2Result};
 use crate::sm2::key::CompressModle;
-use crate::sm2::p256_field::{ECC_P, FieldElement};
+use crate::sm2::p256_field::{FieldElement, ECC_P};
+use crate::sm2::p256_pre_table::{TABLE_1, TABLE_2};
 
 lazy_static! {
     pub static ref P256C_PARAMS: CurveParameters = CurveParameters::new_default();
@@ -425,6 +426,40 @@ impl Point {
             p
         }
     }
+}
+
+#[inline(always)]
+const fn ith_bit(n: u32, i: i32) -> u32 {
+    (n >> i) & 0x01
+}
+
+#[inline(always)]
+const fn compose_k(v: &[u32], i: i32) -> u32 {
+    ith_bit(v[7], i)
+        + (ith_bit(v[6], i) << 1)
+        + (ith_bit(v[5], i) << 2)
+        + (ith_bit(v[4], i) << 3)
+        + (ith_bit(v[3], i) << 4)
+        + (ith_bit(v[2], i) << 5)
+        + (ith_bit(v[1], i) << 6)
+        + (ith_bit(v[0], i) << 7)
+}
+
+pub fn g_mul(m: &BigUint) -> Point {
+    let m = m % &P256C_PARAMS.n;
+    let k = FieldElement::from_biguint(&m).unwrap();
+    let mut q = Point::zero();
+    let mut i = 15;
+    while i >= 0 {
+        q = q.double();
+        let k1 = compose_k(&k.inner, i);
+        let k2 = compose_k(&k.inner, i + 16);
+        let p1 = &TABLE_1[k1 as usize];
+        let p2 = &TABLE_2[k2 as usize];
+        q = q.add(p1).add(p2);
+        i -= 1;
+    }
+    q
 }
 
 //
