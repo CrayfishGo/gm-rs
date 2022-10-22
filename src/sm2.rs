@@ -68,12 +68,6 @@ mod test {
     }
 
     #[test]
-    fn test_sign() {
-        let (pk, sk) = gen_keypair(CompressModle::Compressed).unwrap();
-        signature::sign(None, b"hello", &sk.d, &pk).unwrap();
-    }
-
-    #[test]
     fn test_sign_verify() {
         let msg = b"hello";
         let (pk, sk) = gen_keypair(CompressModle::Compressed).unwrap();
@@ -83,9 +77,9 @@ mod test {
     }
 
     #[test]
-    fn test_key_exchange_user_test() {
-        let id_a = "AAAAAAAAAAAAA";
-        let id_b = "BBBBBBBBBBBBB";
+    fn test_key_exchange() {
+        let id_a = "alice123@qq.com";
+        let id_b = "bob456@qq.com";
 
         let (pk_a, sk_a) = gen_keypair(CompressModle::Compressed).unwrap();
         let (pk_b, sk_b) = gen_keypair(CompressModle::Compressed).unwrap();
@@ -97,8 +91,7 @@ mod test {
         let (rb_point, sb) = user_b.exchange_2(&ra_point).unwrap();
         let sa = user_a.exchange_3(&rb_point, sb).unwrap();
         let succ = user_b.exchange_4(sa, &ra_point).unwrap();
-
-        assert!(succ);
+        println!("test_key_exchange = {}", succ);
         assert_eq!(user_a.k, user_b.k);
     }
 }
