@@ -239,7 +239,7 @@ pub fn fast_reduction(a: &[u32; 16], modulus: &[u32; 8]) -> [u32; 8] {
     sum = rt;
     carry += rc as i32;
 
-    // part3:  2^64 * (m8+m9+m13+m14)
+    // part3:  m8+m9+m13+m14
     let mut part3 = [0; 8];
     let rt: u64 = u64::from(m[8]) + u64::from(m[9]) + u64::from(m[13]) + u64::from(m[14]);
     part3[5] = (rt & 0xffff_ffff) as u32;
