@@ -19,6 +19,8 @@ pub trait Conversion {
     fn bigunit_fe(&self) -> Fe;
 }
 
+// p = FFFFFFFE FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF 00000000 FFFFFFFF FFFFFFFF
+//   = 2^256 - 2^224 - 2^96 + 2^64 -1
 pub const ECC_P: Fe = [
     0xffff_fffe,
     0xffff_ffff,

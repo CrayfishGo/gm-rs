@@ -4,7 +4,7 @@ use lazy_static::lazy_static;
 
 #[rustfmt::skip]
 lazy_static! {
-    pub static ref TABLE_1: Vec<Point> = {
+    pub static ref PRE_TABLE_1: Vec<Point> = {
         let mut table: Vec<Point> = Vec::new();
 		table.push(Point {
 			x: FieldElement::new([0, 0, 0, 0, 0, 0, 0, 1]),
@@ -1290,7 +1290,7 @@ lazy_static! {
         table
     };
 
-	pub static ref TABLE_2: Vec<Point> = {
+	pub static ref PRE_TABLE_2: Vec<Point> = {
         let mut table: Vec<Point> = Vec::new();
 		table.push(Point {
 			x: FieldElement::new([0, 0, 0, 0, 0, 0, 0, 1]),

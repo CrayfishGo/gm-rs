@@ -3,9 +3,10 @@ use num_bigint::BigUint;
 use num_traits::{Num, One};
 
 use crate::sm2::error::{Sm2Error, Sm2Result};
+use crate::sm2::formulas::*;
 use crate::sm2::key::CompressModle;
 use crate::sm2::p256_field::{FieldElement, ECC_P};
-use crate::sm2::p256_pre_table::{TABLE_1, TABLE_2};
+use crate::sm2::p256_pre_table::{PRE_TABLE_1, PRE_TABLE_2};
 
 lazy_static! {
     pub static ref P256C_PARAMS: CurveParameters = CurveParameters::new_default();
@@ -34,14 +35,15 @@ pub struct CurveParameters {
     pub g_point: Point,
 
     // r modp
-    // pub r_p: BigUint,
+    pub r_p: BigUint,
 
     // r^2 modn
-    // pub rr_n: BigUint,
+    pub rr_n: BigUint,
 
     // r^2 modn
-    // pub rr_p: BigUint,
-    /// r^-1 modp
+    pub rr_p: BigUint,
+
+    // r^-1 modp
     pub r_inv: BigUint,
 
     // Calculate the modular inverse of scalar |a| using Fermat's Little
@@ -126,15 +128,30 @@ impl CurveParameters {
             0x2139_f0a0,
         ]);
 
-        let r = BigUint::from_bytes_be(
-            &hex::decode("010000000000000000000000000000000000000000000000000000000000000000")
+        let r = BigUint::new(vec![2]).pow(256);
+
+        let r_inv = BigUint::from_bytes_be(
+            &hex::decode("FFFFFFFB00000005FFFFFFFC00000002FFFFFFFD00000006FFFFFFF900000004")
                 .unwrap(),
         );
 
-        let r_inv = BigUint::from_bytes_be(
-            &hex::decode("fffffffb00000005fffffffc00000002fffffffd00000006fffffff900000004")
-                .unwrap(),
-        );
+        let r_p = BigUint::from_str_radix(
+            "100000000000000000000000000000000FFFFFFFF0000000000000001",
+            16,
+        )
+        .unwrap();
+
+        let rr_n = BigUint::from_str_radix(
+            "1EB5E412A22B3D3B620FC84C3AFFE0D43464504ADE6FA2FA901192AF7C114F20",
+            16,
+        )
+        .unwrap();
+
+        let rr_p = BigUint::from_str_radix(
+            "400000002000000010000000100000002FFFFFFFF0000000200000003",
+            16,
+        )
+        .unwrap();
 
         let ctx = CurveParameters {
             p,
@@ -147,13 +164,16 @@ impl CurveParameters {
                 y: g_y,
                 z: FieldElement::one(),
             },
+            r_p,
+            rr_n,
+            rr_p,
             r_inv,
             p_inv_r_neg: BigUint::from_bytes_be(
-                &hex::decode("fffffffc00000001fffffffe00000000ffffffff000000010000000000000001")
+                &hex::decode("FFFFFFFC00000001FFFFFFFE00000000FFFFFFFF000000010000000000000001")
                     .unwrap(),
             ),
             n_inv_r_neg: BigUint::from_bytes_be(
-                &hex::decode("6f39132f82e4c7bc2b0068d3b08941d4df1e8d34fc8319a5327f9e8872350975")
+                &hex::decode("6F39132F82E4C7BC2B0068D3B08941D4DF1E8D34FC8319A5327F9E8872350975")
                     .unwrap(),
             ),
             r,
@@ -318,62 +338,10 @@ impl Point {
         }
     }
 
-    /// see GMT 0003.1-2012
-    ///
-    /// The "dbl-2007-bl" doubling formulas
-    ///
-    /// Cost: 1M + 8S + 1*a + 10add + 2*2 + 1*3 + 1*8.
-    //       XX = X12
-    //       YY = Y12
-    //       YYYY = YY2
-    //       ZZ = Z12
-    //       S = 2*((X1+YY)2-XX-YYYY)
-    //       M = 3*XX+a*ZZ2
-    //       T = M2-2*S
-    //       X3 = T
-    //       Y3 = M*(S-T)-8*YYYY
-    //       Z3 = (Y1+Z1)2-YY-ZZ
     pub fn double(&self) -> Point {
-        let ecc_a = &P256C_PARAMS.a;
-        let (x1, y1, z1) = (&self.x, &self.y, &self.z);
-        let xx = x1.square();
-        let yy = y1.square();
-        let zz = z1.square();
-
-        let yyyy = &yy.square();
-        let s = ((x1 + &yy).square() - &xx - yyyy).double();
-        let m = &xx.double() + &xx + ecc_a * &zz.square();
-        let t = &m.square() - &s.double();
-        let y3 = &m * (&s - &t) - yyyy.double().double().double();
-        let x3 = t;
-        let z3 = (y1 + z1).square() - &yy - &zz;
-        let p = Point {
-            x: x3,
-            y: y3,
-            z: z3,
-        };
-        p
+        double_2007_bl(self)
     }
 
-    /// see https://hyperelliptic.org/EFD/g1p/auto-shortw-jacobian.html#addition-add-1998-cmo-2
-    ///
-    /// The "add-1998-cmo-2" addition formulas
-    ///
-    /// Cost: 12M + 4S + 6add + 1*2.
-    //       Z1Z1 = Z12
-    //       Z2Z2 = Z22
-    //       U1 = X1*Z2Z2
-    //       U2 = X2*Z1Z1
-    //       S1 = Y1*Z2*Z2Z2
-    //       S2 = Y2*Z1*Z1Z1
-    //       H = U2-U1
-    //       HH = H2
-    //       HHH = H*HH
-    //       r = S2-S1
-    //       V = U1*HH
-    //       X3 = r2-HHH-2*V
-    //       Y3 = r*(V-X3)-S1*HHH
-    //       Z3 = Z1*Z2*H
     pub fn add(&self, p2: &Point) -> Point {
         // 0 + p2 = p2
         if self.is_zero() {
@@ -394,36 +362,7 @@ impl Point {
         if x1 == x2 && y1 == y2 && z1 == z2 {
             return self.double();
         } else {
-            let z1z1 = z1.square();
-            let z2z2 = z2.square();
-            let u1 = x1 * &z2z2;
-            let u2 = x2 * &z1z1;
-            let s1 = y1 * z2 * &z2z2;
-            let s2 = y2 * z1 * &z1z1;
-            let h = &u2 - &u1;
-
-            // let i = h.double().square();
-            // let j = &h * &i;
-            // let r = (&s2 - &s1).double();
-            // let v = &u1 * &i;
-            // let x3 = &r.square() - &j - &v.double();
-            // let y3 = &r * (&v - &x3) - &s1 * &j.double();
-            // let z3 = &h * ((z1 + z2).square() - &z1z1 - z2z2);
-
-            let r = &s2 - &s1;
-            let hh = h.square();
-            let hhh = &h * &hh;
-            let v = &u1 * &hh;
-            let x3 = &r.square() - &hhh - &v.double();
-            let y3 = &r * (&v - &x3) - &s1 * &hhh;
-            let z3 = z1 * z2 * &h;
-
-            let p = Point {
-                x: x3,
-                y: y3,
-                z: z3,
-            };
-            p
+            add_1998_cmo(self, &p2)
         }
     }
 }
@@ -454,8 +393,8 @@ pub fn g_mul(m: &BigUint) -> Point {
         q = q.double();
         let k1 = compose_k(&k.inner, i);
         let k2 = compose_k(&k.inner, i + 16);
-        let p1 = &TABLE_1[k1 as usize];
-        let p2 = &TABLE_2[k2 as usize];
+        let p1 = &PRE_TABLE_1[k1 as usize];
+        let p2 = &PRE_TABLE_2[k2 as usize];
         q = q.add(p1).add(p2);
         i -= 1;
     }
@@ -577,4 +516,83 @@ pub fn w_naf(k: &[u32], w: usize, lst: &mut usize) -> [i8; 257] {
         *lst = 256;
     }
     ret
+}
+
+fn pre_vec_gen(n: u32) -> [u32; 8] {
+    let mut pre_vec: [u32; 8] = [0; 8];
+    let mut i = 0;
+    while i < 8 {
+        pre_vec[7 - i] = (n >> i) & 0x01;
+        i += 1;
+    }
+    pre_vec
+}
+
+fn pre_vec_gen2(n: u32) -> [u32; 8] {
+    let mut pre_vec: [u32; 8] = [0; 8];
+    let mut i = 0;
+    while i < 8 {
+        pre_vec[7 - i] = ((n >> i) & 0x01) << 16;
+        i += 1;
+    }
+    pre_vec
+}
+
+#[cfg(test)]
+mod test {
+    use crate::sm2::p256_ecc::{mul_naf, pre_vec_gen, pre_vec_gen2, Point, P256C_PARAMS};
+    use crate::sm2::p256_field::FieldElement;
+    use num_bigint::BigUint;
+    use num_traits::Num;
+
+    #[test]
+    fn test_g_table() {
+        let mut table_1: Vec<Point> = Vec::new();
+        for i in 0..256 {
+            let k = FieldElement::from_slice(&pre_vec_gen(i as u32));
+            let p1 = mul_naf(&k.to_biguint(), &P256C_PARAMS.g_point);
+            table_1.push(p1);
+        }
+
+        let mut table_2: Vec<Point> = Vec::new();
+        for i in 0..256 {
+            let k = FieldElement::from_slice(&pre_vec_gen2(i as u32));
+            let p1 = mul_naf(&k.to_biguint(), &P256C_PARAMS.g_point);
+            table_2.push(p1);
+        }
+
+        println!("table_1 = {:?}", table_1);
+        println!("table_2 = {:?}", table_2);
+    }
+
+    #[test]
+    fn test_r() {
+        let r_1 = BigUint::from_str_radix(
+            "010000000000000000000000000000000000000000000000000000000000000000",
+            16,
+        )
+        .unwrap();
+
+        let p = BigUint::from_str_radix(
+            "FFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00000000FFFFFFFFFFFFFFFF",
+            16,
+        )
+        .unwrap();
+
+        let n = BigUint::from_str_radix(
+            "FFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFF7203DF6B21C6052B53BBF40939D54123",
+            16,
+        )
+        .unwrap();
+
+        let r = BigUint::new(vec![2]).pow(256);
+        let rr = r.pow(2);
+        println!("r = {:?}", r.to_str_radix(16));
+        println!("r1= {:?}", r_1.to_str_radix(16));
+        println!("r_p = {:?}", (&r % &p).to_str_radix(16));
+        println!("r_n = {:?}", (&r % &n).to_str_radix(16));
+
+        println!("rr_p = {:?}", (&rr % &p).to_str_radix(16));
+        println!("rr_n = {:?}", (&rr % &n).to_str_radix(16));
+    }
 }

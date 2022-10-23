@@ -166,77 +166,91 @@ const fn u32_mul(a: u32, b: u32) -> (u64, u64) {
 // a quick algorithm to reduce elements on SCA-256 field
 // Reference:
 // http://ieeexplore.ieee.org/document/7285166/ for details
+// 国密SM2的快速约减算法详细描述
+// S0 = (m7, m6, m5, m4, m3, m2, m1, m0)
+// S1 = (m15, 0, 0, 0, 0, 0, m15, m14)
+// S2 = (m14, 0, 0, 0, 0, 0, m14, m13)
+// S3 = (m13, 0, 0, 0, 0, 0, 0, m15)
+// S4 = (m12, 0, m15, m14, m13, 0, 0, m15)
+// S5 = (m15, m15, m14, m13, m12, 0, m11, m10)
+// S6 = (m11, m14, m13, m12, m11, 0, m10, m9)
+// S7 = (m10, m11, m10, m9, m8, 0, m13, m12)
+// S8 = (m9, 0, 0, m15, m14, 0, m9, m8)
+// S9 = (m8, 0, 0, 0, m15, 0, m12, m11)
 #[inline(always)]
-pub fn fast_reduction(input: &[u32; 16], modulus: &[u32; 8]) -> [u32; 8] {
-    let mut rs: [[u32; 8]; 10] = [[0; 8]; 10];
-    let mut rx: [u32; 16] = [0; 16];
+pub fn fast_reduction(a: &[u32; 16], modulus: &[u32; 8]) -> [u32; 8] {
+    let mut s: [[u32; 8]; 10] = [[0; 8]; 10];
+    let mut m: [u32; 16] = [0; 16];
 
     let mut i = 0;
     while i < 16 {
-        rx[i] = input[15 - i];
+        m[i] = a[15 - i];
         i += 1;
     }
 
-    rs[0] = [rx[7], rx[6], rx[5], rx[4], rx[3], rx[2], rx[1], rx[0]];
-    rs[1] = [rx[15], 0, 0, 0, 0, 0, rx[15], rx[14]];
-    rs[2] = [rx[14], 0, 0, 0, 0, 0, rx[14], rx[13]];
-    rs[3] = [rx[13], 0, 0, 0, 0, 0, 0, 0];
-    rs[4] = [rx[12], 0, rx[15], rx[14], rx[13], 0, 0, rx[15]];
-    rs[5] = [rx[15], rx[15], rx[14], rx[13], rx[12], 0, rx[11], rx[10]];
-    rs[6] = [rx[11], rx[14], rx[13], rx[12], rx[11], 0, rx[10], rx[9]];
-    rs[7] = [rx[10], rx[11], rx[10], rx[9], rx[8], 0, rx[13], rx[12]];
-    rs[8] = [rx[9], 0, 0, rx[15], rx[14], 0, rx[9], rx[8]];
-    rs[9] = [rx[8], 0, 0, 0, rx[15], 0, rx[12], rx[11]];
+    s[0] = [m[7], m[6], m[5], m[4], m[3], m[2], m[1], m[0]];
+    s[1] = [m[15], 0, 0, 0, 0, 0, m[15], m[14]];
+    s[2] = [m[14], 0, 0, 0, 0, 0, m[14], m[13]];
+    s[3] = [m[13], 0, 0, 0, 0, 0, 0, 0];
+    s[4] = [m[12], 0, m[15], m[14], m[13], 0, 0, m[15]];
+    s[5] = [m[15], m[15], m[14], m[13], m[12], 0, m[11], m[10]];
+    s[6] = [m[11], m[14], m[13], m[12], m[11], 0, m[10], m[9]];
+    s[7] = [m[10], m[11], m[10], m[9], m[8], 0, m[13], m[12]];
+    s[8] = [m[9], 0, 0, m[15], m[14], 0, m[9], m[8]];
+    s[9] = [m[8], 0, 0, 0, m[15], 0, m[12], m[11]];
 
     let mut carry: i32 = 0;
     let mut sum = [0; 8];
 
-    let (rt, rc) = add_raw(&sum, &rs[1]);
+    // part1: 2 * (s1+s2+s3+s4)
+    let (rt, rc) = add_raw(&sum, &s[1]);
     sum = rt;
     carry += rc as i32;
-    let (rt, rc) = add_raw(&sum, &rs[2]);
+    let (rt, rc) = add_raw(&sum, &s[2]);
     sum = rt;
     carry += rc as i32;
-    let (rt, rc) = add_raw(&sum, &rs[3]);
+    let (rt, rc) = add_raw(&sum, &s[3]);
     sum = rt;
     carry += rc as i32;
-    let (rt, rc) = add_raw(&sum, &rs[4]);
+    let (rt, rc) = add_raw(&sum, &s[4]);
     sum = rt;
     carry += rc as i32;
-
     let (rt, rc) = add_raw(&sum, &sum);
     sum = rt;
     carry = carry * 2 + rc as i32;
 
-    let (rt, rc) = add_raw(&sum, &rs[5]);
+    // part2: s0+s5+s6+s7+s8+s9
+    let (rt, rc) = add_raw(&sum, &s[5]);
     sum = rt;
     carry += rc as i32;
-    let (rt, rc) = add_raw(&sum, &rs[6]);
+    let (rt, rc) = add_raw(&sum, &s[6]);
     sum = rt;
     carry += rc as i32;
-    let (rt, rc) = add_raw(&sum, &rs[7]);
+    let (rt, rc) = add_raw(&sum, &s[7]);
     sum = rt;
     carry += rc as i32;
-    let (rt, rc) = add_raw(&sum, &rs[8]);
+    let (rt, rc) = add_raw(&sum, &s[8]);
     sum = rt;
     carry += rc as i32;
-    let (rt, rc) = add_raw(&sum, &rs[9]);
+    let (rt, rc) = add_raw(&sum, &s[9]);
+    sum = rt;
+    carry += rc as i32;
+    let (rt, rc) = add_raw(&sum, &s[0]);
     sum = rt;
     carry += rc as i32;
 
+    // part3:  2^64 * (m8+m9+m13+m14)
     let mut part3 = [0; 8];
-    let rt: u64 = u64::from(rx[8]) + u64::from(rx[9]) + u64::from(rx[13]) + u64::from(rx[14]);
+    let rt: u64 = u64::from(m[8]) + u64::from(m[9]) + u64::from(m[13]) + u64::from(m[14]);
     part3[5] = (rt & 0xffff_ffff) as u32;
     part3[4] = (rt >> 32) as u32;
 
-    let (rt, rc) = add_raw(&sum, &rs[0]);
-    sum = rt;
-    carry += rc as i32;
-
+    // part1 + part2 - part3
     let (rt, rc) = sub_raw(&sum, &part3);
     sum = rt;
     carry -= rc as i32;
 
+    //
     while carry > 0 || sum >= *modulus {
         let (rs, rb) = sub_raw(&sum, modulus);
         sum = rs;
@@ -361,5 +375,64 @@ impl FeOperation for BigUint {
         let mut ret = self.clone();
         ret = ret >> (carry as i32);
         ret
+    }
+}
+
+#[cfg(test)]
+mod test_op {
+    use crate::sm2::p256_ecc::P256C_PARAMS;
+    use crate::sm2::p256_pre_table::PRE_TABLE_1;
+    use crate::sm2::FeOperation;
+    use rand::{thread_rng, Rng};
+
+    #[test]
+    fn test_mod_add() {
+        let mut rng = thread_rng();
+        let n: u32 = rng.gen_range(10..256);
+
+        let modulus = &P256C_PARAMS.p;
+
+        let p = &PRE_TABLE_1[n as usize];
+        let x = p.x.to_biguint();
+        let y = p.y.to_biguint();
+
+        let ret1 = x.mod_add(&y, &modulus.to_biguint());
+        let ret2 = (p.x + p.y).to_biguint();
+
+        assert_eq!(ret2, ret1)
+    }
+
+    #[test]
+    fn test_mod_sub() {
+        let mut rng = thread_rng();
+        let n: u32 = rng.gen_range(10..256);
+
+        let modulus = &P256C_PARAMS.p;
+
+        let p = &PRE_TABLE_1[n as usize];
+        let x = p.x.to_biguint();
+        let y = p.y.to_biguint();
+
+        let ret1 = x.mod_sub(&y, &modulus.to_biguint());
+        let ret2 = (p.x - p.y).to_biguint();
+
+        assert_eq!(ret2, ret1)
+    }
+
+    #[test]
+    fn test_mod_mul() {
+        let mut rng = thread_rng();
+        let n: u32 = rng.gen_range(10..256);
+
+        let modulus = &P256C_PARAMS.p;
+
+        let p = &PRE_TABLE_1[n as usize];
+        let x = p.x.to_biguint();
+        let y = p.y.to_biguint();
+
+        let ret1 = x.mod_mul(&y, &modulus.to_biguint());
+        let ret2 = (p.x * p.y).to_biguint();
+
+        assert_eq!(ret2, ret1)
     }
 }

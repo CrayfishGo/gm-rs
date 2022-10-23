@@ -2,12 +2,13 @@ pub mod error;
 pub mod exchange;
 pub mod key;
 mod macros;
-pub mod operation;
+pub(crate) mod operation;
 pub mod p256_ecc;
 pub mod p256_field;
+mod p256_pre_table;
 pub mod signature;
 pub mod util;
-mod p256_pre_table;
+pub(crate) mod formulas;
 
 /// Fp 的加法，减法，乘法并不是简单的四则运算。其运算结果的值必须在Fp的有限域中，这样保证椭圆曲线变成离散的点
 ///
@@ -51,7 +52,7 @@ pub trait FeOperation {
 #[cfg(test)]
 mod test {
     use crate::sm2::exchange::Exchange;
-    use crate::sm2::key::{gen_keypair, CompressModle};
+    use crate::sm2::key::{CompressModle, gen_keypair};
     use crate::sm2::signature;
 
     #[test]
