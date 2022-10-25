@@ -4,8 +4,9 @@ use num_traits::{FromPrimitive, One, Zero};
 use crate::sm2::error::{Sm2Error, Sm2Result};
 use crate::sm2::key::Sm2PublicKey;
 use crate::sm2::p256_ecc::P256C_PARAMS;
+use crate::sm2::util::{compute_za, random_uint, DEFAULT_ID};
 use crate::sm2::{p256_ecc, FeOperation};
-use crate::sm2::util::{compute_za, DEFAULT_ID, random_uint};
+use crate::sm2::p256_field::FieldElement;
 use crate::sm3::sm3_hash;
 
 pub struct Signature {
@@ -30,19 +31,17 @@ pub fn sign(
     sign_raw(&digest[..], sk)
 }
 
-
-
 fn sign_raw(digest: &[u8], sk: &BigUint) -> Sm2Result<Signature> {
     if digest.len() != 32 {
         return Err(Sm2Error::InvalidDigestLen);
     }
-    let e = BigUint::from_bytes_be(digest);
+    let e = BigUint::from_bytes_be(&digest);
     let n = &P256C_PARAMS.n;
     loop {
         let k = random_uint();
         let p_x = p256_ecc::g_mul(&k).to_affine();
         let x1 = BigUint::from_bytes_be(&p_x.x.to_bytes_be());
-        let r = (&e + x1) % n;
+        let r = e.mod_add(&x1, n);
         if r.is_zero() || &r + &k == *n {
             continue;
         }

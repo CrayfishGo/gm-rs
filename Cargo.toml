@@ -26,9 +26,6 @@ num-integer = "0.1.44"
 criterion = "0.4"
 
 
-[features]
-internal_benches = []
-
 [[bench]]
 name = "signature"
 harness = false

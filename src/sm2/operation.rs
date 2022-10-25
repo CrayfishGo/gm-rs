@@ -1,4 +1,5 @@
 use crate::sm2::p256_field::{Conversion, Fe, FieldElement};
+use crate::sm2::util::{add_u32, add_raw, mul_raw, sub_raw};
 use crate::sm2::FeOperation;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use num_bigint::BigUint;
@@ -42,19 +43,12 @@ impl Conversion for BigUint {
 impl FeOperation for Fe {
     fn mod_add(&self, other: &Self, modulus: &Self) -> Self {
         let (raw_sum, carry) = add_raw(self, other);
-        if carry == 1 || raw_sum >= *modulus {
+        if carry || raw_sum >= *modulus {
             let (sum, _borrow) = sub_raw(&raw_sum, &modulus);
             sum
         } else {
             raw_sum
         }
-    }
-
-    fn mod_add_number(&self, other: u64, modulus: &Self) -> Self {
-        let mut arr: [u32; 8] = [0; 8];
-        arr[7] = (other & 0xffff_ffff) as u32;
-        arr[6] = (other >> 32) as u32;
-        self.mod_add(&arr, modulus)
     }
 
     fn mod_sub(&self, other: &Self, modulus: &Self) -> Self {
@@ -85,7 +79,7 @@ impl FeOperation for Fe {
                     ra = ra.right_shift(0);
                 } else {
                     let (sum, car) = add_raw(&ra, &modulus);
-                    ra = sum.right_shift(car);
+                    ra = sum.right_shift(car as u32);
                 }
             }
 
@@ -95,7 +89,7 @@ impl FeOperation for Fe {
                     rc = rc.right_shift(0);
                 } else {
                     let (sum, car) = add_raw(&rc, &modulus);
-                    rc = sum.right_shift(car);
+                    rc = sum.right_shift(car as u32);
                 }
             }
 
@@ -121,46 +115,18 @@ impl FeOperation for Fe {
         }
         ret
     }
-}
 
-#[inline(always)]
-const fn mul_raw(a: &Fe, b: &Fe) -> [u32; 16] {
-    let mut local: u64 = 0;
-    let mut carry: u64 = 0;
-    let mut ret: [u32; 16] = [0; 16];
-    let mut ret_idx = 0;
-    while ret_idx < 15 {
-        let index = 15 - ret_idx;
-        let mut a_idx = 0;
-        while a_idx < 8 {
-            if a_idx > ret_idx {
-                break;
-            }
-            let b_idx = ret_idx - a_idx;
-            if b_idx < 8 {
-                let (hi, lo) = u32_mul(a[7 - a_idx], b[7 - b_idx]);
-                local += lo;
-                carry += hi;
-            }
-            a_idx += 1;
-        }
-        carry += local >> 32;
-        local &= 0xffff_ffff;
-        ret[index] = local as u32;
-        local = carry;
-        carry = 0;
-        ret_idx += 1;
+    fn raw_add(&self, other: &Self) -> Self {
+        todo!()
     }
-    ret[0] = local as u32;
-    ret
-}
 
-#[inline(always)]
-const fn u32_mul(a: u32, b: u32) -> (u64, u64) {
-    let uv = (a as u64) * (b as u64);
-    let u = uv >> 32;
-    let v = uv & 0xffff_ffff;
-    (u, v)
+    fn raw_sub(&self, other: &Self) -> Self {
+        todo!()
+    }
+
+    fn raw_mul(&self, other: &Self) -> Self {
+        todo!()
+    }
 }
 
 // a quick algorithm to reduce elements on SCA-256 field
@@ -259,56 +225,8 @@ pub fn fast_reduction(a: &[u32; 16], modulus: &[u32; 8]) -> [u32; 8] {
     sum
 }
 
-#[inline(always)]
-pub const fn add_raw(a: &Fe, b: &Fe) -> (Fe, u32) {
-    let mut sum = [0; 8];
-    let mut carry: u32 = 0;
-    let mut i = 7;
-    loop {
-        let (t_sum, c) = adc_32(a[i], b[i], carry);
-        sum[i] = t_sum;
-        carry = c;
-        if i == 0 {
-            break;
-        }
-        i -= 1;
-    }
-    (sum, carry)
-}
-
-/// Computes `a + b + carry`, returning the result along with the new carry.
-#[inline(always)]
-const fn adc_32(a: u32, b: u32, carry: u32) -> (u32, u32) {
-    let ret = (a as u64) + (b as u64) + (carry as u64);
-    ((ret & 0xffff_ffff) as u32, (ret >> 32) as u32)
-}
-
-#[inline(always)]
-const fn sub_raw(a: &Fe, b: &Fe) -> (Fe, bool) {
-    let mut sum = [0; 8];
-    let mut borrow = false;
-    let mut j = 0;
-    while j < 8 {
-        let i = 7 - j;
-        let t_sum: i64 = (a[i] as i64) - (b[i] as i64) - (borrow as i64);
-        if t_sum < 0 {
-            sum[i] = (t_sum + (1 << 32)) as u32;
-            borrow = true;
-        } else {
-            sum[i] = t_sum as u32;
-            borrow = false;
-        }
-        j += 1;
-    }
-    (sum, borrow)
-}
-
 impl FeOperation for BigUint {
     fn mod_add(&self, other: &Self, modulus: &Self) -> BigUint {
-        (self + other) % modulus
-    }
-
-    fn mod_add_number(&self, other: u64, modulus: &Self) -> BigUint {
         (self + other) % modulus
     }
 
@@ -375,6 +293,18 @@ impl FeOperation for BigUint {
         let mut ret = self.clone();
         ret = ret >> (carry as i32);
         ret
+    }
+
+    fn raw_add(&self, other: &Self) -> Self {
+        todo!()
+    }
+
+    fn raw_sub(&self, other: &Self) -> Self {
+        todo!()
+    }
+
+    fn raw_mul(&self, other: &Self) -> Self {
+        todo!()
     }
 }
 

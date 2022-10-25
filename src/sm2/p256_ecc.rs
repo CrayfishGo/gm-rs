@@ -33,31 +33,6 @@ pub struct CurveParameters {
 
     /// G：椭圆曲线的一个基点，其阶为素数
     pub g_point: Point,
-
-    // r modp
-    pub r_p: BigUint,
-
-    // r^2 modn
-    pub rr_n: BigUint,
-
-    // r^2 modn
-    pub rr_p: BigUint,
-
-    // r^-1 modp
-    pub r_inv: BigUint,
-
-    // Calculate the modular inverse of scalar |a| using Fermat's Little
-    // Theorem:
-    //
-    //    a**-1 (mod n) == a**(n - 2) (mod n)
-    // so, p_inv_r_neg == -p^-1 modr, ps. p^-1 = p^(r-2) modr
-    pub p_inv_r_neg: BigUint,
-
-    // like p_inv_r_neg, n_inv_r_neg == -n^-1 modr, ps. n^-1 = n^(r-2) modr
-    pub n_inv_r_neg: BigUint,
-
-    /// r = 2 ^256
-    pub r: BigUint,
 }
 
 impl Default for CurveParameters {
@@ -128,31 +103,6 @@ impl CurveParameters {
             0x2139_f0a0,
         ]);
 
-        let r = BigUint::new(vec![2]).pow(256);
-
-        let r_inv = BigUint::from_bytes_be(
-            &hex::decode("FFFFFFFB00000005FFFFFFFC00000002FFFFFFFD00000006FFFFFFF900000004")
-                .unwrap(),
-        );
-
-        let r_p = BigUint::from_str_radix(
-            "100000000000000000000000000000000FFFFFFFF0000000000000001",
-            16,
-        )
-        .unwrap();
-
-        let rr_n = BigUint::from_str_radix(
-            "1EB5E412A22B3D3B620FC84C3AFFE0D43464504ADE6FA2FA901192AF7C114F20",
-            16,
-        )
-        .unwrap();
-
-        let rr_p = BigUint::from_str_radix(
-            "400000002000000010000000100000002FFFFFFFF0000000200000003",
-            16,
-        )
-        .unwrap();
-
         let ctx = CurveParameters {
             p,
             n,
@@ -164,19 +114,6 @@ impl CurveParameters {
                 y: g_y,
                 z: FieldElement::one(),
             },
-            r_p,
-            rr_n,
-            rr_p,
-            r_inv,
-            p_inv_r_neg: BigUint::from_bytes_be(
-                &hex::decode("FFFFFFFC00000001FFFFFFFE00000000FFFFFFFF000000010000000000000001")
-                    .unwrap(),
-            ),
-            n_inv_r_neg: BigUint::from_bytes_be(
-                &hex::decode("6F39132F82E4C7BC2B0068D3B08941D4DF1E8D34FC8319A5327F9E8872350975")
-                    .unwrap(),
-            ),
-            r,
         };
         ctx
     }
@@ -339,7 +276,7 @@ impl Point {
     }
 
     pub fn double(&self) -> Point {
-        double_2007_bl(self)
+        double_1998_cmo(self)
     }
 
     pub fn add(&self, p2: &Point) -> Point {
@@ -385,6 +322,8 @@ const fn compose_k(v: &[u32], i: i32) -> u32 {
 }
 
 pub fn g_mul(m: &BigUint) -> Point {
+    // mlsm_mul(m, &P256C_PARAMS.g_point)
+
     let m = m % &P256C_PARAMS.n;
     let k = FieldElement::from_biguint(&m).unwrap();
     let mut q = Point::zero();
@@ -399,48 +338,42 @@ pub fn g_mul(m: &BigUint) -> Point {
         i -= 1;
     }
     q
+
 }
 
 //
 // P = [k]G
 pub fn scalar_mul(m: &BigUint, p: &Point) -> Point {
-    mul_naf(&m, p)
-    // if m.is_one() {
-    //     mul_naf(&m, p)
-    // } else {
-    //     mul_binary(&m, p)
-    // }
+    mul_naf(m, p)
 }
 
-// 二进制展开法
-// todo fix 会导致签名验证失败 -- 待修复
-pub fn mul_binary(m: &BigUint, p: &Point) -> Point {
-    let mut q = Point::zero();
-    let mut order = p.clone();
-    let k = m.to_bytes_be();
-    for k_j in k {
-        let mut bit: usize = 0;
-        while bit < 8 {
-            if (k_j >> bit) & 0x01 != 0 {
-                q = q.add(&order);
-            }
-            order = order.double();
-            bit += 1;
+// Montgomery ladder based scalar multiplication (MLSM)
+// Input: integer k and point P, m = bit length of k
+// 1: Initial: Q1 = Q0 = 0, QT = P, i = 0
+// 2: While i < m, do:
+// 3: Q1 = Q0 + QT , Q2 = 2QT
+// 4: If(ki = 1) Switch(Q0, Q1)
+// 5: QT = Q2, i = i + 1
+// 6: end While
+fn mlsm_mul(k: &BigUint, p: &Point) -> Point {
+    let bi = k.to_bytes_be();
+    let mut q0 = Point::zero();
+    let mut qt = p.clone();
+    let mut i = 0;
+    while i < bi.len() {
+        let q1 = q0.add(&qt);
+        let q2 = qt.double();
+        if bi[i] & 0x1 == 1 {
+            q0 = q1;
         }
+        qt = q2;
+        i += 1;
     }
-    // let mut j = k.len() - 1;
-    // while j > 0 {
-    //     q = q.double();
-    //     if k[j] & 0x01 == 1 {
-    //         q = q.add(p);
-    //     }
-    //     j -= 1;
-    // }
-    q
+    qt
 }
 
 // 滑动窗法
-pub fn mul_naf(m: &BigUint, p: &Point) -> Point {
+fn mul_naf(m: &BigUint, p: &Point) -> Point {
     let k = FieldElement::from_biguint(m).unwrap();
     let mut l = 256;
     let naf = w_naf(&k.inner, 5, &mut l);
@@ -477,7 +410,7 @@ pub fn mul_naf(m: &BigUint, p: &Point) -> Point {
 }
 
 //w-naf algorithm
-pub fn w_naf(k: &[u32], w: usize, lst: &mut usize) -> [i8; 257] {
+fn w_naf(k: &[u32], w: usize, lst: &mut usize) -> [i8; 257] {
     let mut carry = 0;
     let mut bit = 0;
     let mut ret: [i8; 257] = [0; 257];
@@ -540,7 +473,7 @@ fn pre_vec_gen2(n: u32) -> [u32; 8] {
 
 #[cfg(test)]
 mod test {
-    use crate::sm2::p256_ecc::{mul_naf, pre_vec_gen, pre_vec_gen2, Point, P256C_PARAMS};
+    use crate::sm2::p256_ecc::{pre_vec_gen, pre_vec_gen2, scalar_mul, Point, P256C_PARAMS};
     use crate::sm2::p256_field::FieldElement;
     use num_bigint::BigUint;
     use num_traits::Num;
@@ -550,14 +483,14 @@ mod test {
         let mut table_1: Vec<Point> = Vec::new();
         for i in 0..256 {
             let k = FieldElement::from_slice(&pre_vec_gen(i as u32));
-            let p1 = mul_naf(&k.to_biguint(), &P256C_PARAMS.g_point);
+            let p1 = scalar_mul(&k.to_biguint(), &P256C_PARAMS.g_point);
             table_1.push(p1);
         }
 
         let mut table_2: Vec<Point> = Vec::new();
         for i in 0..256 {
             let k = FieldElement::from_slice(&pre_vec_gen2(i as u32));
-            let p1 = mul_naf(&k.to_biguint(), &P256C_PARAMS.g_point);
+            let p1 = scalar_mul(&k.to_biguint(), &P256C_PARAMS.g_point);
             table_2.push(p1);
         }
 
