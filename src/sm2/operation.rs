@@ -1,5 +1,5 @@
 use crate::sm2::p256_field::{Conversion, Fe, FieldElement};
-use crate::sm2::util::{add_u32, add_raw, mul_raw, sub_raw};
+use crate::sm2::util::{add_raw, mul_raw, sub_raw};
 use crate::sm2::FeOperation;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use num_bigint::BigUint;
@@ -114,18 +114,6 @@ impl FeOperation for Fe {
             i += 1;
         }
         ret
-    }
-
-    fn raw_add(&self, other: &Self) -> Self {
-        todo!()
-    }
-
-    fn raw_sub(&self, other: &Self) -> Self {
-        todo!()
-    }
-
-    fn raw_mul(&self, other: &Self) -> Self {
-        todo!()
     }
 }
 
@@ -293,18 +281,6 @@ impl FeOperation for BigUint {
         let mut ret = self.clone();
         ret = ret >> (carry as i32);
         ret
-    }
-
-    fn raw_add(&self, other: &Self) -> Self {
-        todo!()
-    }
-
-    fn raw_sub(&self, other: &Self) -> Self {
-        todo!()
-    }
-
-    fn raw_mul(&self, other: &Self) -> Self {
-        todo!()
     }
 }
 

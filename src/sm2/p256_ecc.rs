@@ -322,9 +322,6 @@ const fn compose_k(v: &[u32], i: i32) -> u32 {
 }
 
 pub fn g_mul(m: &BigUint) -> Point {
-    // mlsm_mul(m, &P256C_PARAMS.g_point)
-
-    let m = m % &P256C_PARAMS.n;
     let k = FieldElement::from_biguint(&m).unwrap();
     let mut q = Point::zero();
     let mut i = 15;
@@ -338,7 +335,6 @@ pub fn g_mul(m: &BigUint) -> Point {
         i -= 1;
     }
     q
-
 }
 
 //
@@ -355,22 +351,23 @@ pub fn scalar_mul(m: &BigUint, p: &Point) -> Point {
 // 4: If(ki = 1) Switch(Q0, Q1)
 // 5: QT = Q2, i = i + 1
 // 6: end While
-fn mlsm_mul(k: &BigUint, p: &Point) -> Point {
-    let bi = k.to_bytes_be();
-    let mut q0 = Point::zero();
-    let mut qt = p.clone();
-    let mut i = 0;
-    while i < bi.len() {
-        let q1 = q0.add(&qt);
-        let q2 = qt.double();
-        if bi[i] & 0x1 == 1 {
-            q0 = q1;
-        }
-        qt = q2;
-        i += 1;
-    }
-    qt
-}
+
+// fn mlsm_mul(k: &BigUint, p: &Point) -> Point {
+//     let bi = k.to_bytes_be();
+//     let mut q0 = Point::zero();
+//     let mut qt = p.clone();
+//     let mut i = 0;
+//     while i < bi.len() {
+//         let q1 = q0.add(&qt);
+//         let q2 = qt.double();
+//         if bi[i] & 0x1 == 1 {
+//             q0 = q1;
+//         }
+//         qt = q2;
+//         i += 1;
+//     }
+//     qt
+// }
 
 // 滑动窗法
 fn mul_naf(m: &BigUint, p: &Point) -> Point {

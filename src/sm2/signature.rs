@@ -6,7 +6,6 @@ use crate::sm2::key::Sm2PublicKey;
 use crate::sm2::p256_ecc::P256C_PARAMS;
 use crate::sm2::util::{compute_za, random_uint, DEFAULT_ID};
 use crate::sm2::{p256_ecc, FeOperation};
-use crate::sm2::p256_field::FieldElement;
 use crate::sm3::sm3_hash;
 
 pub struct Signature {
