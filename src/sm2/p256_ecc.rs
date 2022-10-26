@@ -351,23 +351,23 @@ pub fn scalar_mul(m: &BigUint, p: &Point) -> Point {
 // 4: If(ki = 1) Switch(Q0, Q1)
 // 5: QT = Q2, i = i + 1
 // 6: end While
-
-// fn mlsm_mul(k: &BigUint, p: &Point) -> Point {
-//     let bi = k.to_bytes_be();
-//     let mut q0 = Point::zero();
-//     let mut qt = p.clone();
-//     let mut i = 0;
-//     while i < bi.len() {
-//         let q1 = q0.add(&qt);
-//         let q2 = qt.double();
-//         if bi[i] & 0x1 == 1 {
-//             q0 = q1;
-//         }
-//         qt = q2;
-//         i += 1;
-//     }
-//     qt
-// }
+// TODO fixme: The mlsm_mul cause signature verify failed
+pub fn mlsm_mul(k: &BigUint, p: &Point) -> Point {
+    let bi = k.to_bytes_be();
+    let mut q0 = Point::zero();
+    let mut qt = p.clone();
+    let mut i = 0;
+    while i < bi.len() {
+        let q1 = q0.add(&qt);
+        let q2 = qt.double();
+        if bi[i] & 0x1 == 1 {
+            q0 = q1;
+        }
+        qt = q2;
+        i += 1;
+    }
+    qt
+}
 
 // 滑动窗法
 fn mul_naf(m: &BigUint, p: &Point) -> Point {
