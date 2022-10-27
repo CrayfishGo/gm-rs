@@ -2,9 +2,10 @@ use crate::sm2::p256_field::{Conversion, Fe, FieldElement};
 use crate::sm2::util::{add_raw, mul_raw, sub_raw};
 use crate::sm2::FeOperation;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-use num_bigint::BigUint;
+use num_bigint::{BigUint, ModInverse};
 use num_integer::Integer;
 use num_traits::{One, Zero};
+use std::cmp::Ordering;
 use std::io::Cursor;
 
 impl Conversion for Fe {
@@ -234,52 +235,12 @@ impl FeOperation for BigUint {
     }
 
     fn inv(&self, modulus: &Self) -> BigUint {
-        let mut ru = self.clone();
-        let mut rv = modulus.clone();
-        let mut ra = BigUint::one();
-        let mut rc = BigUint::zero();
-        let rn = modulus.clone();
-        while ru != BigUint::zero() {
-            if ru.is_even() {
-                ru >>= 1;
-                if ra.is_even() {
-                    ra >>= 1;
-                } else {
-                    ra = (ra + &rn) >> 1;
-                }
-            }
-
-            if rv.is_even() {
-                rv >>= 1;
-                if rc.is_even() {
-                    rc >>= 1;
-                } else {
-                    rc = (rc + &rn) >> 1;
-                }
-            }
-
-            if ru >= rv {
-                ru -= &rv;
-                if ra >= rc {
-                    ra -= &rc;
-                } else {
-                    ra = ra + &rn - &rc;
-                }
-            } else {
-                rv -= &ru;
-                if rc >= ra {
-                    rc -= &ra;
-                } else {
-                    rc = rc + &rn - &ra;
-                }
-            }
-        }
-        rc
+        self.mod_inverse(modulus).unwrap().to_biguint().unwrap()
     }
 
     fn right_shift(&self, carry: u32) -> BigUint {
         let mut ret = self.clone();
-        ret = ret >> (carry as i32);
+        ret = ret >> (carry as i32) as usize;
         ret
     }
 }
@@ -289,6 +250,7 @@ mod test_op {
     use crate::sm2::p256_ecc::P256C_PARAMS;
     use crate::sm2::p256_pre_table::PRE_TABLE_1;
     use crate::sm2::FeOperation;
+    use num_bigint::ModInverse;
     use rand::{thread_rng, Rng};
 
     #[test]
@@ -338,6 +300,27 @@ mod test_op {
 
         let ret1 = x.mod_mul(&y, &modulus.to_biguint());
         let ret2 = (p.x * p.y).to_biguint();
+
+        assert_eq!(ret2, ret1)
+    }
+
+    #[test]
+    fn test_mod_inv() {
+        let mut rng = thread_rng();
+        let n: u32 = rng.gen_range(10..256);
+
+        let modulus = &P256C_PARAMS.p;
+
+        let p = &PRE_TABLE_1[n as usize];
+        let x = p.x.to_biguint();
+        let y = p.y.to_biguint();
+
+        let ret1 = x.inv(&modulus.to_biguint());
+        let ret2 = x
+            .mod_inverse(&modulus.to_biguint())
+            .unwrap()
+            .to_biguint()
+            .unwrap();
 
         assert_eq!(ret2, ret1)
     }

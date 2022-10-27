@@ -5,7 +5,7 @@ use crate::sm2::util::{compute_za, kdf, random_uint, DEFAULT_ID};
 use crate::sm3::sm3_hash;
 use byteorder::{BigEndian, WriteBytesExt};
 use num_bigint::BigUint;
-use num_traits::{FromPrimitive, One};
+use num_traits::{FromPrimitive, One, Pow};
 
 pub struct Exchange {
     klen: usize,

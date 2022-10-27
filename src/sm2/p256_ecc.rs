@@ -473,7 +473,7 @@ mod test {
     use crate::sm2::p256_ecc::{pre_vec_gen, pre_vec_gen2, scalar_mul, Point, P256C_PARAMS};
     use crate::sm2::p256_field::FieldElement;
     use num_bigint::BigUint;
-    use num_traits::Num;
+    use num_traits::{FromPrimitive, Num, Pow};
 
     #[test]
     fn test_g_table() {
@@ -515,8 +515,8 @@ mod test {
         )
         .unwrap();
 
-        let r = BigUint::new(vec![2]).pow(256);
-        let rr = r.pow(2);
+        let r = BigUint::from_u32(2).unwrap().pow(256 as u32);
+        let rr = r.pow(2u32);
         println!("r = {:?}", r.to_str_radix(16));
         println!("r1= {:?}", r_1.to_str_radix(16));
         println!("r_p = {:?}", (&r % &p).to_str_radix(16));
