@@ -21,8 +21,9 @@ pub enum Sm2Error {
     InvalidFieldLen,
     ZeroSig,
     InvalidDigestLen,
+    InvalidDigest,
     InvalidSecretKey,
-    KdfHashError
+    KdfHashError,
 }
 
 impl ::std::fmt::Debug for Sm2Error {
@@ -52,6 +53,7 @@ impl From<Sm2Error> for &str {
             Sm2Error::InvalidDigestLen => "the length of digest must be 32-bytes",
             Sm2Error::InvalidSecretKey => "invalid secret key",
             Sm2Error::KdfHashError => "KDF hash error",
+            Sm2Error::InvalidDigest => "invalid signature digest",
         }
     }
 }
@@ -77,6 +79,7 @@ impl Display for Sm2Error {
             Sm2Error::InvalidDigestLen => "the length of digest must be 32-bytes",
             Sm2Error::InvalidSecretKey => "invalid secret key",
             Sm2Error::KdfHashError => "KDF hash error",
+            Sm2Error::InvalidDigest => "invalid signature digest",
         };
         write!(f, "{}", err_msg)
     }

@@ -1,9 +1,10 @@
 use num_bigint::BigUint;
+use num_traits::{FromPrimitive, One, Zero};
 
 use crate::sm2::error::{Sm2Error, Sm2Result};
-use crate::sm2::p256_ecc;
 use crate::sm2::p256_ecc::{Point, P256C_PARAMS};
-use crate::sm2::util::{kdf, random_uint};
+use crate::sm2::util::{compute_za, kdf, random_uint, DEFAULT_ID};
+use crate::sm2::{p256_ecc, FeOperation};
 use crate::sm3::sm3_hash;
 
 #[derive(Debug, Clone, Copy)]
@@ -61,6 +62,50 @@ impl Sm2PublicKey {
         }
     }
 
+    pub fn verify(&self, id: Option<&'static str>, msg: &[u8], sig: &[u8]) -> Sm2Result<()> {
+        let id = match id {
+            None => DEFAULT_ID,
+            Some(u_id) => u_id,
+        };
+        let mut digest = compute_za(id, self)?;
+        digest = sm3_hash(&[digest.to_vec(), msg.to_vec()].concat());
+        self.verify_raw(&digest[..], self, sig)
+    }
+
+    fn verify_raw(&self, digest: &[u8], pk: &Sm2PublicKey, sig: &[u8]) -> Sm2Result<()> {
+        if digest.len() != 32 {
+            return Err(Sm2Error::InvalidDigestLen);
+        }
+        let n = &P256C_PARAMS.n;
+        let r = &BigUint::from_bytes_be(&sig[..32]);
+        let s = &BigUint::from_bytes_be(&sig[32..]);
+        if r.is_zero() || s.is_zero() {
+            return Err(Sm2Error::ZeroSig);
+        }
+
+        if r >= n || s >= n {
+            return Err(Sm2Error::InvalidDigest);
+        }
+
+        let t = s.mod_add(r, n);
+        if t.is_zero() {
+            return Err(Sm2Error::InvalidDigest);
+        }
+
+        let s_g = p256_ecc::g_mul(&s);
+        let t_p = p256_ecc::scalar_mul(&t, &pk.value());
+
+        let p = s_g.add(&t_p).to_affine();
+        let x1 = BigUint::from_bytes_be(&p.x.to_bytes_be());
+        let e = BigUint::from_bytes_be(digest);
+        let r1 = x1.mod_add(&e, n);
+        return if &r1 == r {
+            Ok(())
+        } else {
+            Err(Sm2Error::InvalidDigest)
+        };
+    }
+
     pub fn to_str_hex(&self) -> String {
         format!(
             "{}{}",
@@ -77,9 +122,52 @@ impl Sm2PublicKey {
 pub struct Sm2PrivateKey {
     pub d: BigUint,
     pub compress_modle: CompressModle,
+    pub public_key: Sm2PublicKey,
 }
 
 impl Sm2PrivateKey {
+    pub fn sign(&self, id: Option<&'static str>, msg: &[u8]) -> Sm2Result<Vec<u8>> {
+        let id = match id {
+            None => DEFAULT_ID,
+            Some(u_id) => u_id,
+        };
+        let mut digest = compute_za(id, &self.public_key)?;
+        digest = sm3_hash(&[digest.to_vec(), msg.to_vec()].concat());
+        self.sign_raw(&digest[..], &self.d)
+    }
+
+    fn sign_raw(&self, digest: &[u8], sk: &BigUint) -> Sm2Result<Vec<u8>> {
+        if digest.len() != 32 {
+            return Err(Sm2Error::InvalidDigestLen);
+        }
+        let e = BigUint::from_bytes_be(&digest);
+        let n = &P256C_PARAMS.n;
+        loop {
+            let k = random_uint();
+            let p_x = p256_ecc::g_mul(&k).to_affine();
+            let x1 = BigUint::from_bytes_be(&p_x.x.to_bytes_be());
+            let r = e.mod_add(&x1, n);
+            if r.is_zero() || &r + &k == *n {
+                continue;
+            }
+
+            let s1 = &(BigUint::one() + sk).modpow(&(n - BigUint::from_u32(2).unwrap()), n);
+
+            let s2_1 = r.mod_mul(&sk, n);
+            let s2 = k.mod_sub(&s2_1, n);
+
+            let s = s1.mod_mul(&s2, n);
+
+            if s.is_zero() {
+                return Err(Sm2Error::ZeroSig);
+            }
+            let mut sig: Vec<u8> = vec![];
+            sig.extend_from_slice(&r.to_bytes_be());
+            sig.extend_from_slice(&s.to_bytes_be());
+            return Ok(sig);
+        }
+    }
+
     pub fn decrypt(&self, ciphertext: &[u8]) -> Sm2Result<Vec<u8>> {
         let c1_end_index = match self.compress_modle {
             CompressModle::Compressed => 33,
@@ -142,18 +230,18 @@ pub enum CompressModle {
 
 /// generate key pair
 pub fn gen_keypair(compress_modle: CompressModle) -> Sm2Result<(Sm2PublicKey, Sm2PrivateKey)> {
+    let d = random_uint();
+    let pk = public_from_private(&d, compress_modle)?;
     let sk = Sm2PrivateKey {
-        d: random_uint(),
+        d,
         compress_modle,
+        public_key: pk,
     };
-    Ok((public_from_private(&sk, compress_modle)?, sk))
+    Ok((pk, sk))
 }
 
-fn public_from_private(
-    sk: &Sm2PrivateKey,
-    compress_modle: CompressModle,
-) -> Sm2Result<Sm2PublicKey> {
-    let p = p256_ecc::g_mul(&sk.d);
+fn public_from_private(sk: &BigUint, compress_modle: CompressModle) -> Sm2Result<Sm2PublicKey> {
+    let p = p256_ecc::g_mul(&sk);
     if p.is_valid() {
         Ok(Sm2PublicKey {
             value: p,

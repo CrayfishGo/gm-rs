@@ -4,44 +4,43 @@ use gm_rs::sm2::key::{gen_keypair, CompressModle, Sm2PrivateKey, Sm2PublicKey};
 use gm_rs::sm2::p256_ecc::{Point, P256C_PARAMS};
 use gm_rs::sm2::p256_field::FieldElement;
 use gm_rs::sm2::p256_pre_table::PRE_TABLE_1;
-use gm_rs::sm2::signature;
-use gm_rs::sm2::signature::Signature;
 use rand::{thread_rng, Rng};
 
 fn test_gen_keypair() -> (Sm2PublicKey, Sm2PrivateKey) {
     gen_keypair(CompressModle::Compressed).unwrap()
 }
 
-fn test_sign() -> (Sm2PublicKey, Signature) {
+fn test_sign() -> (Vec<u8>, Sm2PrivateKey) {
     let msg = b"hellohellohellohellohellohellohellohellohellohellohellohellohello";
-    let (pk, sk) = test_gen_keypair();
-    let sig = signature::sign(None, msg, &sk.d, &pk).unwrap();
-    (pk, sig)
+    let (_pk, sk) = test_gen_keypair();
+    let sig = sk.sign(None, msg).unwrap();
+    (sig, sk)
 }
 
 fn bench_sign_g<'a, M: Measurement>(group: &mut BenchmarkGroup<'a, M>) {
     let msg = b"hellohellohellohellohellohellohellohellohellohellohellohellohello";
-    let (pk, sk) = test_gen_keypair();
-    group.bench_function("bench_sign", |b| {
-        b.iter(|| signature::sign(None, msg, &sk.d, &pk).unwrap())
-    });
+    let (_pk, sk) = test_gen_keypair();
+    group.bench_function("bench_sign", |b| b.iter(|| sk.sign(None, msg).unwrap()));
 }
 
 fn bench_verify_g<'a, M: Measurement>(group: &mut BenchmarkGroup<'a, M>) {
     let msg = b"hellohellohellohellohellohellohellohellohellohellohellohellohello";
-    let (pk, sig) = test_sign();
+    let (sig, sk) = test_sign();
+    let pk = sk.public_key;
     group.bench_function("bench_verify", |b| {
-        b.iter(|| sig.verify(None, msg, &pk).unwrap())
+        b.iter(|| pk.verify(None, msg, &sig).unwrap())
     });
 }
 
 fn test_point_double<'a, M: Measurement>(group: &mut BenchmarkGroup<'a, M>) {
     let mut rng = thread_rng();
     let n: u32 = rng.gen_range(10..256);
-    group.bench_function("bench_point_double", |b| b.iter(||{
-        let mut p = &PRE_TABLE_1[n as usize];
-        p = &p.double();
-    }));
+    let mut p = PRE_TABLE_1[n as usize];
+    group.bench_function("bench_point_double", |b| {
+        b.iter(|| {
+            p = p.double();
+        })
+    });
 }
 
 fn test_point_add<'a, M: Measurement>(group: &mut BenchmarkGroup<'a, M>) {

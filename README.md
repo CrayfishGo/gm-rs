@@ -8,7 +8,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-gm-rs = "0.5.4"
+gm-rs = "0.6.0"
 ```
 
 ## Example
@@ -51,9 +51,8 @@ use crate::sm2::signature;
 fn main() {
     let msg = b"hello";
     let (pk, sk) = gen_keypair(CompressModle::Compressed).unwrap();
-    let signature = signature::sign(None, msg, &sk.d, &pk).unwrap();
-    let r = signature.verify(None, msg, &pk).unwrap();
-    println!("test_sign_verify = {}", r)
+    let signature = sk.sign(None, msg).unwrap();
+    pk.verify(None, msg, &signature).unwrap()
 }
 
 ```

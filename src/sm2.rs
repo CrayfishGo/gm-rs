@@ -1,14 +1,13 @@
 pub mod error;
 pub mod exchange;
+pub(crate) mod formulas;
 pub mod key;
 mod macros;
 pub(crate) mod operation;
 pub mod p256_ecc;
 pub mod p256_field;
 pub mod p256_pre_table;
-pub mod signature;
 pub mod util;
-pub(crate) mod formulas;
 
 /// Fp 的加法，减法，乘法并不是简单的四则运算。其运算结果的值必须在Fp的有限域中，这样保证椭圆曲线变成离散的点
 ///
@@ -45,14 +44,12 @@ pub trait FeOperation {
 
     /// Self >>= carry
     fn right_shift(&self, carry: u32) -> Self;
-
 }
 
 #[cfg(test)]
 mod test_sm2 {
     use crate::sm2::exchange::Exchange;
-    use crate::sm2::key::{CompressModle, gen_keypair};
-    use crate::sm2::signature;
+    use crate::sm2::key::{gen_keypair, CompressModle};
 
     #[test]
     fn test_gen_keypair() {
@@ -72,9 +69,8 @@ mod test_sm2 {
     fn test_sign_verify() {
         let msg = b"hello";
         let (pk, sk) = gen_keypair(CompressModle::Compressed).unwrap();
-        let signature = signature::sign(None, msg, &sk.d, &pk).unwrap();
-        let r = signature.verify(None, msg, &pk).unwrap();
-        assert_eq!(r, true)
+        let signature = sk.sign(None, msg).unwrap();
+        pk.verify(None, msg, &signature).unwrap();
     }
 
     #[test]
