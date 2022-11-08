@@ -1,12 +1,12 @@
-use crate::sm2::p256_field::{Conversion, Fe, FieldElement};
-use crate::sm2::util::{add_raw, mul_raw, sub_raw};
-use crate::sm2::FeOperation;
+use std::io::Cursor;
+
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use num_bigint::{BigUint, ModInverse};
 use num_integer::Integer;
-use num_traits::{One, Zero};
-use std::cmp::Ordering;
-use std::io::Cursor;
+
+use crate::sm2::p256_field::{Conversion, Fe, FieldElement};
+use crate::sm2::util::{add_raw, mul_raw, sub_raw};
+use crate::sm2::FeOperation;
 
 impl Conversion for Fe {
     fn fe_to_bigunit(&self) -> BigUint {
@@ -66,6 +66,10 @@ impl FeOperation for Fe {
     fn mod_mul(&self, other: &Self, modulus: &Self) -> Self {
         let raw_prod = mul_raw(self, other);
         fast_reduction(&raw_prod, &modulus)
+
+        // let aa = fe_to_montgomery(&fe32_to_fe64(self));
+        // let bb = fe_to_montgomery(&fe32_to_fe64(other));
+        // fe64_to_fe32(&fe_from_montgomery(&fe_mul(&aa, &bb)))
     }
 
     fn inv(&self, modulus: &Self) -> Self {
@@ -247,11 +251,12 @@ impl FeOperation for BigUint {
 
 #[cfg(test)]
 mod test_op {
+    use num_bigint::ModInverse;
+    use rand::{thread_rng, Rng};
+
     use crate::sm2::p256_ecc::P256C_PARAMS;
     use crate::sm2::p256_pre_table::PRE_TABLE_1;
     use crate::sm2::FeOperation;
-    use num_bigint::ModInverse;
-    use rand::{thread_rng, Rng};
 
     #[test]
     fn test_mod_add() {
@@ -313,7 +318,6 @@ mod test_op {
 
         let p = &PRE_TABLE_1[n as usize];
         let x = p.x.to_biguint();
-        let y = p.y.to_biguint();
 
         let ret1 = x.inv(&modulus.to_biguint());
         let ret2 = x

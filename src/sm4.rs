@@ -1,3 +1,6 @@
+use std::error;
+use std::fmt::{Display, Formatter};
+
 static SBOX: [u8; 256] = [
     0xd6, 0x90, 0xe9, 0xfe, 0xcc, 0xe1, 0x3d, 0xb7, 0x16, 0xb6, 0x14, 0xc2, 0x28, 0xfb, 0x2c, 0x05,
     0x2b, 0x67, 0x9a, 0x76, 0x2a, 0xbe, 0x04, 0xc3, 0xaa, 0x44, 0x13, 0x26, 0x49, 0x86, 0x06, 0x99,
@@ -20,12 +23,411 @@ static SBOX: [u8; 256] = [
 static FK: [u32; 4] = [0xa3b1bac6, 0x56aa3350, 0x677d9197, 0xb27022dc];
 
 static CK: [u32; 32] = [
-    0x00070e15, 0x1c232a31, 0x383f464d, 0x545b6269,
-    0x70777e85, 0x8c939aa1, 0xa8afb6bd, 0xc4cbd2d9,
-    0xe0e7eef5, 0xfc030a11, 0x181f262d, 0x343b4249,
-    0x50575e65, 0x6c737a81, 0x888f969d, 0xa4abb2b9,
-    0xc0c7ced5, 0xdce3eaf1, 0xf8ff060d, 0x141b2229,
-    0x30373e45, 0x4c535a61, 0x686f767d, 0x848b9299,
-    0xa0a7aeb5, 0xbcc3cad1, 0xd8dfe6ed, 0xf4fb0209,
-    0x10171e25, 0x2c333a41, 0x484f565d, 0x646b7279
+    0x00070e15, 0x1c232a31, 0x383f464d, 0x545b6269, 0x70777e85, 0x8c939aa1, 0xa8afb6bd, 0xc4cbd2d9,
+    0xe0e7eef5, 0xfc030a11, 0x181f262d, 0x343b4249, 0x50575e65, 0x6c737a81, 0x888f969d, 0xa4abb2b9,
+    0xc0c7ced5, 0xdce3eaf1, 0xf8ff060d, 0x141b2229, 0x30373e45, 0x4c535a61, 0x686f767d, 0x848b9299,
+    0xa0a7aeb5, 0xbcc3cad1, 0xd8dfe6ed, 0xf4fb0209, 0x10171e25, 0x2c333a41, 0x484f565d, 0x646b7279,
 ];
+
+pub type Sm4Result<T> = Result<T, Sm4Error>;
+
+pub enum Sm4Error {
+    ErrorBlockSize,
+    ErrorDataLen,
+    InvalidLastU8,
+}
+
+impl ::std::fmt::Debug for Sm4Error {
+    fn fmt(&self, f: &mut Formatter<'_>) -> ::std::fmt::Result {
+        write!(f, "{}", self)
+    }
+}
+
+impl From<Sm4Error> for &str {
+    fn from(e: Sm4Error) -> Self {
+        match e {
+            Sm4Error::ErrorBlockSize => "the block size of SM4 must be 16",
+            Sm4Error::ErrorDataLen => "the data len of SM4 must be 16",
+            Sm4Error::InvalidLastU8 => {
+                "the last u8 of cbc_decrypt out in SM4 must be positive which isn't greater than 16"
+            }
+        }
+    }
+}
+
+impl error::Error for Sm4Error {}
+
+impl Display for Sm4Error {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Sm4Error::ErrorBlockSize => "the block size of SM4 must be 16",
+                Sm4Error::ErrorDataLen => "the data len of SM4 must be 16",
+                Sm4Error::InvalidLastU8 => {
+                    "the last u8 of cbc_decrypt out in SM4 must be positive which isn't greater than 16"
+                }
+            }
+        )
+    }
+}
+
+fn bytes_to_word(input: &[u8]) -> u32 {
+    let out: u32 = u32::from(input[3]);
+    let out = out | (u32::from(input[2]) << 8);
+    let out = out | (u32::from(input[1]) << 16);
+    out | (u32::from(input[0]) << 24)
+}
+
+fn split_block(input: &[u8]) -> Sm4Result<[u32; 4]> {
+    if input.len() != 16 {
+        return Err(Sm4Error::ErrorBlockSize);
+    }
+    let mut out: [u32; 4] = [0; 4];
+    for (i, v) in out.iter_mut().enumerate().take(4) {
+        let start = 4 * i;
+        let end = 4 * i + 4;
+        *v = bytes_to_word(&input[start..end])
+    }
+    Ok(out)
+}
+
+fn word_to_bytes(input: u32) -> [u8; 4] {
+    let i4: u8 = input as u8;
+    let i3: u8 = (input >> 8) as u8;
+    let i2: u8 = (input >> 16) as u8;
+    let i1: u8 = (input >> 24) as u8;
+    [i1, i2, i3, i4]
+}
+
+fn tau_trans(input: u32) -> u32 {
+    let input = word_to_bytes(input);
+    let mut out: [u8; 4] = [0; 4];
+    for i in 0..4 {
+        out[i] = SBOX[input[i] as usize];
+    }
+    bytes_to_word(&out)
+}
+
+fn l_rotate(x: u32, i: u32) -> u32 {
+    (x << (i % 32)) | (x >> (32 - (i % 32)))
+}
+
+fn l_trans(input: u32) -> u32 {
+    let b = input;
+    b ^ l_rotate(b, 2) ^ l_rotate(b, 10) ^ l_rotate(b, 18) ^ l_rotate(b, 24)
+}
+
+fn t_trans(input: u32) -> u32 {
+    l_trans(tau_trans(input))
+}
+
+fn l_prime_trans(input: u32) -> u32 {
+    let b = input;
+    b ^ l_rotate(b, 13) ^ l_rotate(b, 23)
+}
+
+fn t_prime_trans(input: u32) -> u32 {
+    l_prime_trans(tau_trans(input))
+}
+
+fn combine_block(input: &[u32]) -> Sm4Result<Vec<u8>> {
+    let mut out: [u8; 16] = [0; 16];
+    for i in 0..4 {
+        let outi = word_to_bytes(input[i]);
+        for j in 0..4 {
+            out[i * 4 + j] = outi[j];
+        }
+    }
+    Ok(out.to_vec())
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct Sm4Cipher {
+    rk: Vec<u32>,
+}
+
+impl Sm4Cipher {
+    pub fn new(k: &[u8]) -> Sm4Result<Sm4Cipher> {
+        let mut cipher = Sm4Cipher { rk: Vec::new() };
+        let mut k = split_block(k)?;
+        for i in 0..4 {
+            k[i] ^= FK[i];
+        }
+        for i in 0..8 {
+            k[0] ^= t_prime_trans(k[1] ^ k[2] ^ k[3] ^ CK[i * 4]);
+            k[1] ^= t_prime_trans(k[2] ^ k[3] ^ k[0] ^ CK[i * 4 + 1]);
+            k[2] ^= t_prime_trans(k[3] ^ k[0] ^ k[1] ^ CK[i * 4 + 2]);
+            k[3] ^= t_prime_trans(k[0] ^ k[1] ^ k[2] ^ CK[i * 4 + 3]);
+            cipher.rk.push(k[0]);
+            cipher.rk.push(k[1]);
+            cipher.rk.push(k[2]);
+            cipher.rk.push(k[3]);
+        }
+        Ok(cipher)
+    }
+
+    pub fn encrypt(&self, data: &[u8]) -> Sm4Result<Vec<u8>> {
+        let mut x: [u32; 4] = split_block(data)?;
+        let rk = &self.rk;
+        for i in 0..8 {
+            x[0] ^= t_trans(x[1] ^ x[2] ^ x[3] ^ rk[i * 4]);
+            x[1] ^= t_trans(x[2] ^ x[3] ^ x[0] ^ rk[i * 4 + 1]);
+            x[2] ^= t_trans(x[3] ^ x[0] ^ x[1] ^ rk[i * 4 + 2]);
+            x[3] ^= t_trans(x[0] ^ x[1] ^ x[2] ^ rk[i * 4 + 3]);
+        }
+        let y = [x[3], x[2], x[1], x[0]];
+        combine_block(&y)
+    }
+
+    pub fn decrypt(&self, data: &[u8]) -> Sm4Result<Vec<u8>> {
+        let mut x: [u32; 4] = split_block(data)?;
+        let rk = &self.rk;
+        for i in 0..8 {
+            x[0] ^= t_trans(x[1] ^ x[2] ^ x[3] ^ rk[31 - i * 4]);
+            x[1] ^= t_trans(x[2] ^ x[3] ^ x[0] ^ rk[31 - (i * 4 + 1)]);
+            x[2] ^= t_trans(x[3] ^ x[0] ^ x[1] ^ rk[31 - (i * 4 + 2)]);
+            x[3] ^= t_trans(x[0] ^ x[1] ^ x[2] ^ rk[31 - (i * 4 + 3)]);
+        }
+        let y = [x[3], x[2], x[1], x[0]];
+        combine_block(&y)
+    }
+}
+
+pub enum CipherMode {
+    Cfb,
+    Ofb,
+    Ctr,
+    Cbc,
+}
+
+pub struct Sm4CipherMode {
+    cipher: Sm4Cipher,
+    mode: CipherMode,
+}
+
+fn block_xor(a: &[u8], b: &[u8]) -> [u8; 16] {
+    let mut out: [u8; 16] = [0; 16];
+    for i in 0..16 {
+        out[i] = a[i] ^ b[i];
+    }
+    out
+}
+
+fn block_add_one(a: &mut [u8]) {
+    let mut carry = 1;
+
+    for i in 0..16 {
+        let (t, c) = a[15 - i].overflowing_add(carry);
+        a[15 - i] = t;
+        if !c {
+            return;
+        }
+        carry = c as u8;
+    }
+}
+
+impl Sm4CipherMode {
+    pub fn new(key: &[u8], mode: CipherMode) -> Sm4Result<Sm4CipherMode> {
+        let cipher = Sm4Cipher::new(key)?;
+        Ok(Sm4CipherMode { cipher, mode })
+    }
+
+    pub fn encrypt(&self, data: &[u8], iv: &[u8]) -> Sm4Result<Vec<u8>> {
+        if iv.len() != 16 {
+            return Err(Sm4Error::ErrorBlockSize);
+        }
+        match self.mode {
+            CipherMode::Cfb => self.cfb_encrypt(data, iv),
+            CipherMode::Ofb => self.ofb_encrypt(data, iv),
+            CipherMode::Ctr => self.ctr_encrypt(data, iv),
+            CipherMode::Cbc => self.cbc_encrypt(data, iv),
+        }
+    }
+
+    pub fn decrypt(&self, data: &[u8], iv: &[u8]) -> Sm4Result<Vec<u8>> {
+        if iv.len() != 16 {
+            return Err(Sm4Error::ErrorBlockSize);
+        }
+        match self.mode {
+            CipherMode::Cfb => self.cfb_decrypt(data, iv),
+            CipherMode::Ofb => self.ofb_encrypt(data, iv),
+            CipherMode::Ctr => self.ctr_encrypt(data, iv),
+            CipherMode::Cbc => self.cbc_decrypt(data, iv),
+        }
+    }
+
+    fn cfb_encrypt(&self, data: &[u8], iv: &[u8]) -> Result<Vec<u8>, Sm4Error> {
+        let block_num = data.len() / 16;
+        let tail_len = data.len() - block_num * 16;
+
+        let mut out: Vec<u8> = Vec::new();
+        let mut vec_buf: Vec<u8> = vec![0; 16];
+        vec_buf.clone_from_slice(iv);
+
+        // Normal
+        for i in 0..block_num {
+            let enc = self.cipher.encrypt(&vec_buf[..])?;
+            let ct = block_xor(&enc, &data[i * 16..i * 16 + 16]);
+            for i in ct.iter() {
+                out.push(*i);
+            }
+            vec_buf.clone_from_slice(&ct);
+        }
+
+        // Last block
+        let enc = self.cipher.encrypt(&vec_buf[..])?;
+        for i in 0..tail_len {
+            let b = data[block_num * 16 + i] ^ enc[i];
+            out.push(b);
+        }
+        Ok(out)
+    }
+
+    fn cfb_decrypt(&self, data: &[u8], iv: &[u8]) -> Result<Vec<u8>, Sm4Error> {
+        let block_num = data.len() / 16;
+        let tail_len = data.len() - block_num * 16;
+
+        let mut out: Vec<u8> = Vec::new();
+        let mut vec_buf: Vec<u8> = vec![0; 16];
+        vec_buf.clone_from_slice(iv);
+
+        // Normal
+        for i in 0..block_num {
+            let enc = self.cipher.encrypt(&vec_buf[..])?;
+            let ct = &data[i * 16..i * 16 + 16];
+            let pt = block_xor(&enc, ct);
+            for i in pt.iter() {
+                out.push(*i);
+            }
+            vec_buf.clone_from_slice(ct);
+        }
+
+        // Last block
+        let enc = self.cipher.encrypt(&vec_buf[..])?;
+        for i in 0..tail_len {
+            let b = data[block_num * 16 + i] ^ enc[i];
+            out.push(b);
+        }
+        Ok(out)
+    }
+
+    fn ofb_encrypt(&self, data: &[u8], iv: &[u8]) -> Result<Vec<u8>, Sm4Error> {
+        let block_num = data.len() / 16;
+        let tail_len = data.len() - block_num * 16;
+
+        let mut out: Vec<u8> = Vec::new();
+        let mut vec_buf: Vec<u8> = vec![0; 16];
+        vec_buf.clone_from_slice(iv);
+
+        // Normal
+        for i in 0..block_num {
+            let enc = self.cipher.encrypt(&vec_buf[..])?;
+            let ct = block_xor(&enc, &data[i * 16..i * 16 + 16]);
+            for i in ct.iter() {
+                out.push(*i);
+            }
+            vec_buf.clone_from_slice(&enc);
+        }
+
+        // Last block
+        let enc = self.cipher.encrypt(&vec_buf[..])?;
+        for i in 0..tail_len {
+            let b = data[block_num * 16 + i] ^ enc[i];
+            out.push(b);
+        }
+        Ok(out)
+    }
+
+    fn ctr_encrypt(&self, data: &[u8], iv: &[u8]) -> Result<Vec<u8>, Sm4Error> {
+        let block_num = data.len() / 16;
+        let tail_len = data.len() - block_num * 16;
+
+        let mut out: Vec<u8> = Vec::new();
+        let mut vec_buf: Vec<u8> = vec![0; 16];
+        vec_buf.clone_from_slice(iv);
+
+        // Normal
+        for i in 0..block_num {
+            let enc = self.cipher.encrypt(&vec_buf[..])?;
+            let ct = block_xor(&enc, &data[i * 16..i * 16 + 16]);
+            for i in ct.iter() {
+                out.push(*i);
+            }
+            block_add_one(&mut vec_buf[..]);
+        }
+
+        // Last block
+        let enc = self.cipher.encrypt(&vec_buf[..])?;
+        for i in 0..tail_len {
+            let b = data[block_num * 16 + i] ^ enc[i];
+            out.push(b);
+        }
+        Ok(out)
+    }
+
+    fn cbc_encrypt(&self, data: &[u8], iv: &[u8]) -> Result<Vec<u8>, Sm4Error> {
+        let block_num = data.len() / 16;
+        let remind = data.len() % 16;
+
+        let mut out: Vec<u8> = Vec::new();
+        let mut vec_buf: Vec<u8> = vec![0; 16];
+        vec_buf.copy_from_slice(iv);
+
+        // Normal
+        for i in 0..block_num {
+            let ct = block_xor(&vec_buf, &data[i * 16..i * 16 + 16]);
+            let enc = self.cipher.encrypt(&ct)?;
+
+            out.extend_from_slice(&enc);
+            vec_buf = enc;
+        }
+
+        if remind != 0 {
+            let mut last_block = [16 - remind as u8; 16];
+            last_block[..remind].copy_from_slice(&data[block_num * 16..]);
+
+            let ct = block_xor(&vec_buf, &last_block);
+            let enc = self.cipher.encrypt(&ct)?;
+            out.extend_from_slice(&enc);
+        } else {
+            let ff_padding = block_xor(&vec_buf, &[0x10; 16]);
+            let enc = self.cipher.encrypt(&ff_padding)?;
+            out.extend_from_slice(&enc);
+        }
+
+        Ok(out)
+    }
+
+    fn cbc_decrypt(&self, data: &[u8], iv: &[u8]) -> Result<Vec<u8>, Sm4Error> {
+        let data_len = data.len();
+        let block_num = data_len / 16;
+        if data_len % 16 != 0 {
+            return Err(Sm4Error::ErrorDataLen);
+        }
+
+        let mut out: Vec<u8> = Vec::new();
+        let mut vec_buf = [0; 16];
+        vec_buf.copy_from_slice(iv);
+
+        // Normal
+        for i in 0..block_num {
+            let enc = self.cipher.decrypt(&data[i * 16..i * 16 + 16])?;
+            let ct = block_xor(&vec_buf, &enc);
+
+            for j in ct.iter() {
+                out.push(*j);
+            }
+            vec_buf.copy_from_slice(&data[i * 16..i * 16 + 16]);
+        }
+
+        let last_u8 = out[data_len - 1];
+        if last_u8 > 0x10 || last_u8 == 0 {
+            return Err(Sm4Error::InvalidLastU8);
+        }
+        out.resize(data_len - last_u8 as usize, 0);
+
+        Ok(out)
+    }
+}

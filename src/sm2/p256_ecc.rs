@@ -1,5 +1,5 @@
 use lazy_static::lazy_static;
-use num_bigint::BigUint;
+use num_bigint::{BigInt, BigUint};
 use num_traits::{Num, One};
 
 use crate::sm2::error::{Sm2Error, Sm2Result};
@@ -33,6 +33,11 @@ pub struct CurveParameters {
 
     /// G：椭圆曲线的一个基点，其阶为素数
     pub g_point: Point,
+
+    pub rr: BigInt,
+    pub rr_pp: BigInt,
+    pub r: BigInt,
+    pub q: BigInt,
 }
 
 impl Default for CurveParameters {
@@ -103,6 +108,11 @@ impl CurveParameters {
             0x2139_f0a0,
         ]);
 
+        let r = BigInt::from_str_radix(
+            "010000000000000000000000000000000000000000000000000000000000000000",
+            16,
+        )
+        .unwrap();
         let ctx = CurveParameters {
             p,
             n,
@@ -114,6 +124,18 @@ impl CurveParameters {
                 y: g_y,
                 z: FieldElement::one(),
             },
+            rr: &r * &r,
+            rr_pp: BigInt::from_str_radix(
+                "400000002000000010000000100000002ffffffff0000000200000003",
+                16,
+            )
+            .unwrap(),
+            r,
+            q: BigInt::from_str_radix(
+                "-3fffffffe00000001ffffffff00000000fffffffeffffffffffffffff",
+                16,
+            )
+            .unwrap(),
         };
         ctx
     }
