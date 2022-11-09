@@ -217,40 +217,6 @@ impl<'a> Mul<&'a FieldElement> for FieldElement {
     }
 }
 
-impl Add<u64> for FieldElement {
-    type Output = FieldElement;
-
-    fn add(mut self, rhs: u64) -> Self::Output {
-        self.inner = self
-            .inner
-            .mod_add(&FieldElement::from_number(rhs).inner, &ECC_P);
-        self
-    }
-}
-
-impl Mul<u64> for FieldElement {
-    type Output = FieldElement;
-
-    fn mul(mut self, rhs: u64) -> Self::Output {
-        self.inner = self
-            .inner
-            .mod_mul(&FieldElement::from_number(rhs).inner, &ECC_P);
-        self
-    }
-}
-
-impl<'a> Mul<u64> for &'a FieldElement {
-    type Output = FieldElement;
-
-    fn mul(self, rhs: u64) -> Self::Output {
-        let mut s = self.clone();
-        s.inner = s
-            .inner
-            .mod_mul(&FieldElement::from_number(rhs).inner, &ECC_P);
-        s
-    }
-}
-
 impl Default for FieldElement {
     #[inline]
     fn default() -> FieldElement {

@@ -9,7 +9,6 @@ use gm_rs::sm2::p256_ecc::{Point, P256C_PARAMS};
 use gm_rs::sm2::p256_field::FieldElement;
 use gm_rs::sm2::p256_pre_table::PRE_TABLE_1;
 use gm_rs::sm2::FeOperation;
-use gm_rs::sm2::field64::{fe_from_montgomery, fe_mul, fe_to_montgomery};
 
 fn test_gen_keypair() -> (Sm2PublicKey, Sm2PrivateKey) {
     gen_keypair(CompressModle::Compressed).unwrap()
@@ -139,31 +138,6 @@ fn bench_mod_mul_mont_2(c: &mut Criterion) {
     });
     group.finish();
 }
-//
-// fn bench_mod_mul_mont_3(c: &mut Criterion) {
-//     let mut group = c.benchmark_group("sm2");
-//     let a: &[u64; 4] = &[
-//         0xfffff8950000053b,
-//         0xfffffdc600000543,
-//         0xfffffb8c00000324,
-//         0xfffffc4d0000064e,
-//     ];
-//
-//     let b: &[u64; 4] = &[
-//         0x16553623adc0a99a,
-//         0xd3f55c3f46cdfd75,
-//         0x7bdb6926ab664658,
-//         0x52ab139ac09ec830,
-//     ];
-//     group.bench_function("bench_mod_mul_mont_3", |x| {
-//         x.iter(|| {
-//             let aa = fe_to_montgomery(&a);
-//             let bb = fe_to_montgomery(&b);
-//             let ret = fe_from_montgomery(&fe_mul(&aa, &bb));
-//         })
-//     });
-//     group.finish();
-// }
 
 fn bench_mod_mul_bigint_2(c: &mut Criterion) {
     let mut group = c.benchmark_group("sm2");
@@ -192,17 +166,13 @@ fn bench_mod_inv(c: &mut Criterion) {
 
 criterion_group!(
     benches,
-    // bench_sign,
-    // bench_verify,
-    // bench_point_double,
-    // bench_point_add,
-    // bench_mod_add,
-    // bench_mod_sub,
+    bench_sign,
+    bench_verify,
+    bench_point_double,
+    bench_point_add,
+    bench_mod_add,
+    bench_mod_sub,
     bench_mod_mul,
-    bench_mod_mul_mont,
-    bench_mod_mul_mont_2,
-    // bench_mod_mul_mont_3,
-    bench_mod_mul_bigint_2,
     bench_mod_inv,
 );
 criterion_main!(benches);
