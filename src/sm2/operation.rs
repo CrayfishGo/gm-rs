@@ -66,10 +66,6 @@ impl FeOperation for Fe {
     fn mod_mul(&self, other: &Self, modulus: &Self) -> Self {
         let raw_prod = mul_raw(self, other);
         fast_reduction(&raw_prod, &modulus)
-
-        // let aa = fe_to_montgomery(&fe32_to_fe64(self));
-        // let bb = fe_to_montgomery(&fe32_to_fe64(other));
-        // fe64_to_fe32(&fe_from_montgomery(&fe_mul(&aa, &bb)))
     }
 
     fn inv(&self, modulus: &Self) -> Self {

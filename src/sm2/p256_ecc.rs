@@ -141,12 +141,6 @@ impl CurveParameters {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub enum PointModel {
-    AFFINE,
-    JACOBIAN,
-}
-
 #[derive(Debug, Clone, Eq, PartialEq, Copy)]
 pub struct Point {
     pub x: FieldElement,
@@ -344,6 +338,7 @@ const fn compose_k(v: &[u32], i: i32) -> u32 {
 }
 
 pub fn g_mul(m: &BigUint) -> Point {
+    // mlsm_mul(m, &P256C_PARAMS.g_point)
     let k = FieldElement::from_biguint(&m).unwrap();
     let mut q = Point::zero();
     let mut i = 15;
@@ -388,7 +383,7 @@ pub fn mlsm_mul(k: &BigUint, p: &Point) -> Point {
         qt = q2;
         i += 1;
     }
-    qt
+    q0
 }
 
 // 滑动窗法
