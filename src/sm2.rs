@@ -3,12 +3,12 @@ pub mod exchange;
 pub(crate) mod formulas;
 pub mod key;
 mod macros;
+pub mod montgomery;
 pub(crate) mod operation;
 pub mod p256_ecc;
 pub mod p256_field;
 pub mod p256_pre_table;
 pub mod util;
-pub mod montgomery;
 
 /// Fp 的加法，减法，乘法并不是简单的四则运算。其运算结果的值必须在Fp的有限域中，这样保证椭圆曲线变成离散的点
 ///
@@ -49,7 +49,8 @@ pub trait FeOperation {
 
 #[cfg(test)]
 mod test_sm2 {
-    use crate::sm2::exchange::Exchange;
+    use crypto_bigint::U256;
+    use crate::sm2::exchange;
     use crate::sm2::key::{gen_keypair, CompressModle};
 
     #[test]
@@ -79,17 +80,14 @@ mod test_sm2 {
         let id_a = "alice123@qq.com";
         let id_b = "bob456@qq.com";
 
-        let (pk_a, sk_a) = gen_keypair(CompressModle::Compressed).unwrap();
-        let (pk_b, sk_b) = gen_keypair(CompressModle::Compressed).unwrap();
+        let (mut alice, mut bob) = exchange::build_ex_pair(8, id_a, id_b).unwrap();
 
-        let mut user_a = Exchange::new(8, Some(id_a), &pk_a, &sk_a, Some(id_b), &pk_b).unwrap();
-        let mut user_b = Exchange::new(8, Some(id_b), &pk_b, &sk_b, Some(id_a), &pk_a).unwrap();
-
-        let ra_point = user_a.exchange_1().unwrap();
-        let (rb_point, sb) = user_b.exchange_2(&ra_point).unwrap();
-        let sa = user_a.exchange_3(&rb_point, sb).unwrap();
-        let succ = user_b.exchange_4(sa, &ra_point).unwrap();
+        let ra_point = alice.exchange_1().unwrap();
+        let (rb_point, sb) = bob.exchange_2(&ra_point).unwrap();
+        let sa = alice.exchange_3(&rb_point, sb).unwrap();
+        let succ = bob.exchange_4(sa, &ra_point).unwrap();
         assert_eq!(succ, true);
-        assert_eq!(user_a.k, user_b.k);
+        assert_eq!(alice.k, bob.k);
     }
+
 }

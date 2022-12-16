@@ -1,12 +1,13 @@
 use crate::sm2::error::{Sm2Error, Sm2Result};
-use crate::sm2::key::{Sm2PrivateKey, Sm2PublicKey};
-use crate::sm2::p256_ecc::{scalar_mul, Point, P256C_PARAMS, g_mul};
+use crate::sm2::key::{gen_keypair, CompressModle, Sm2PrivateKey, Sm2PublicKey};
+use crate::sm2::p256_ecc::{g_mul, scalar_mul, Point, P256C_PARAMS};
 use crate::sm2::util::{compute_za, kdf, random_uint, DEFAULT_ID};
 use crate::sm3::sm3_hash;
 use byteorder::{BigEndian, WriteBytesExt};
 use num_bigint::BigUint;
 use num_traits::{FromPrimitive, One, Pow};
 
+#[derive(Debug)]
 pub struct Exchange {
     klen: usize,
     za: [u8; 32],
@@ -18,6 +19,20 @@ pub struct Exchange {
 
     rhs_za: [u8; 32],
     rhs_pk: Sm2PublicKey,
+}
+
+/// Build the exchange Pair
+///
+pub fn build_ex_pair(
+    klen: usize,
+    first_id: &str,
+    other_id: &str,
+) -> Sm2Result<(Exchange, Exchange)> {
+    let (pk_a, sk_a) = gen_keypair(CompressModle::Compressed).unwrap();
+    let (pk_b, sk_b) = gen_keypair(CompressModle::Compressed).unwrap();
+    let user_a = Exchange::new(klen, Some(first_id), &pk_a, &sk_a, Some(other_id), &pk_b).unwrap();
+    let user_b = Exchange::new(klen, Some(other_id), &pk_b, &sk_b, Some(first_id), &pk_a).unwrap();
+    Ok((user_a, user_b))
 }
 
 impl Exchange {

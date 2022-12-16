@@ -338,7 +338,6 @@ const fn compose_k(v: &[u32], i: i32) -> u32 {
 }
 
 pub fn g_mul(m: &BigUint) -> Point {
-    // mlsm_mul(m, &P256C_PARAMS.g_point)
     let k = FieldElement::from_biguint(&m).unwrap();
     let mut q = Point::zero();
     let mut i = 15;
@@ -388,10 +387,6 @@ pub fn mlsm_mul(k: &BigUint, p: &Point) -> Point {
 
 // 滑动窗法
 fn mul_naf(m: &BigUint, p: &Point) -> Point {
-    let k = FieldElement::from_biguint(m).unwrap();
-    let mut l = 256;
-    let naf = w_naf(&k.inner, 5, &mut l);
-
     // 预处理计算
     let p1 = p.clone();
     let p2 = p.double();
@@ -407,7 +402,9 @@ fn mul_naf(m: &BigUint, p: &Point) -> Point {
         pre_table[offset - 2 * i - 1] = pre_table[2 * i + offset + 1].neg();
     }
 
-    // 主循环
+    let k = FieldElement::from_biguint(m).unwrap();
+    let mut l = 256;
+    let naf = w_naf(&k.inner, 5, &mut l);
     let mut q = Point::zero();
     loop {
         q = q.double();
@@ -424,6 +421,7 @@ fn mul_naf(m: &BigUint, p: &Point) -> Point {
 }
 
 //w-naf algorithm
+#[inline(always)]
 fn w_naf(k: &[u32], w: usize, lst: &mut usize) -> [i8; 257] {
     let mut carry = 0;
     let mut bit = 0;
