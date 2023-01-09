@@ -10,6 +10,7 @@ use rand::RngCore;
 
 pub(crate) const DEFAULT_ID: &'static str = "1234567812345678";
 
+#[inline]
 pub fn random_uint() -> BigUint {
     let n = &P256C_PARAMS.n;
     let mut rng = rand::thread_rng();
@@ -53,6 +54,7 @@ pub fn compute_za(id: &str, pk: &Sm2PublicKey) -> Sm2Result<[u8; 32]> {
     Ok(sm3_hash(&prepend))
 }
 
+#[inline]
 pub fn kdf(z: &[u8], klen: usize) -> Vec<u8> {
     let mut ct = 0x00000001u32;
     let bound = ((klen as f64) / 32.0).ceil() as u32;

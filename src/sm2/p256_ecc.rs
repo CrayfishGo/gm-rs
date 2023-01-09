@@ -66,6 +66,7 @@ impl CurveParameters {
             16,
         )
         .unwrap();
+        // a = p - 3
         let a = FieldElement::new([
             0xffff_fffe,
             0xffff_ffff,
@@ -326,7 +327,7 @@ const fn ith_bit(n: u32, i: i32) -> u32 {
 }
 
 #[inline(always)]
-const fn compose_k(v: &[u32], i: i32) -> u32 {
+const fn compose_index(v: &[u32], i: i32) -> u32 {
     ith_bit(v[7], i)
         + (ith_bit(v[6], i) << 1)
         + (ith_bit(v[5], i) << 2)
@@ -343,10 +344,10 @@ pub fn g_mul(m: &BigUint) -> Point {
     let mut i = 15;
     while i >= 0 {
         q = q.double();
-        let k1 = compose_k(&k.inner, i);
-        let k2 = compose_k(&k.inner, i + 16);
-        let p1 = &PRE_TABLE_1[k1 as usize];
-        let p2 = &PRE_TABLE_2[k2 as usize];
+        let low_index = compose_index(&k.inner, i);
+        let high_index = compose_index(&k.inner, i + 16);
+        let p1 = &PRE_TABLE_1[low_index as usize];
+        let p2 = &PRE_TABLE_2[high_index as usize];
         q = q.add(p1).add(p2);
         i -= 1;
     }

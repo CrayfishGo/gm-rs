@@ -20,6 +20,7 @@ pub trait Conversion {
 }
 
 // p = FFFFFFFE FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF 00000000 FFFFFFFF FFFFFFFF
+// p = 2^256 − 2^224 − 2^96 + 2^32 − 1
 pub const ECC_P: Fe = [
     0xffff_fffe,
     0xffff_ffff,
@@ -53,6 +54,7 @@ impl FieldElement {
         FieldElement { inner: x }
     }
 
+    #[inline]
     pub fn from_slice(x: &[u32]) -> FieldElement {
         let mut arr: Fe = [0; 8];
         arr.copy_from_slice(&x[..]);
@@ -89,11 +91,13 @@ impl FieldElement {
         Ok(elem)
     }
 
+    #[inline]
     pub fn to_biguint(&self) -> BigUint {
         let v = self.to_bytes_be();
         BigUint::from_bytes_be(&v[..])
     }
 
+    #[inline]
     pub fn from_biguint(bi: &BigUint) -> Sm2Result<FieldElement> {
         let v = bi.to_bytes_be();
         let mut num_v = [0; 32];
@@ -143,14 +147,17 @@ impl FieldElement {
         self.inner[7] == 1
     }
 
+    #[inline]
     pub fn square(&self) -> FieldElement {
-        self.clone() * self.clone()
+        self * self
     }
 
+    #[inline]
     pub fn double(&self) -> FieldElement {
-        self.clone() + self.clone()
+        self + self
     }
 
+    #[inline]
     pub fn modpow(&self, exponent: &BigUint) -> Self {
         let u = FieldElement::from_biguint(exponent).unwrap();
         let mut q0 = FieldElement::from_number(1);
@@ -174,6 +181,7 @@ impl FieldElement {
     }
 
     // calculate x^(-1) mod p
+    #[inline]
     pub fn modinv(&self) -> FieldElement {
         let ecc_p = &P256C_PARAMS.p;
         let ret = self.inner.inv(&ecc_p.inner);
@@ -224,4 +232,25 @@ impl Default for FieldElement {
             inner: [0; 8],
         }
     }
+}
+
+
+#[cfg(test)]
+mod test_fe{
+    use crate::sm2::p256_field::FieldElement;
+
+    #[test]
+    fn test_mod_mul(){
+        let a = FieldElement::new([
+            764497930, 2477372445, 473039778, 1327312203, 3110691882, 1307193102, 2665428562, 967816337,
+        ]);
+        let b = FieldElement::new([
+            2873589426, 3315627933, 3055686524, 325110103, 3264434653, 2512214348, 3018997295,
+            3617546169,
+        ]);
+
+        let ret = a * b;
+        println!("{:?}", ret)
+    }
+
 }

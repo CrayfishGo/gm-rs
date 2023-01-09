@@ -42,6 +42,7 @@ impl Conversion for BigUint {
 }
 
 impl FeOperation for Fe {
+    #[inline]
     fn mod_add(&self, other: &Self, modulus: &Self) -> Self {
         let (raw_sum, carry) = add_raw(self, other);
         if carry || raw_sum >= *modulus {
@@ -52,6 +53,7 @@ impl FeOperation for Fe {
         }
     }
 
+    #[inline]
     fn mod_sub(&self, other: &Self, modulus: &Self) -> Self {
         let (raw_diff, borrow) = sub_raw(&self, other);
         if borrow {
@@ -63,11 +65,13 @@ impl FeOperation for Fe {
         }
     }
 
+    #[inline]
     fn mod_mul(&self, other: &Self, modulus: &Self) -> Self {
         let raw_prod = mul_raw(self, other);
         fast_reduction(&raw_prod, &modulus)
     }
 
+    #[inline]
     fn inv(&self, modulus: &Self) -> Self {
         let mut ru = *self;
         let mut rv = *modulus;
@@ -105,6 +109,7 @@ impl FeOperation for Fe {
         rc
     }
 
+    #[inline]
     fn right_shift(&self, carry: u32) -> Self {
         let mut ret = [0; 8];
         let mut carry = carry;
@@ -132,6 +137,7 @@ impl FeOperation for Fe {
 // S7 = (m10, m11, m10, m9, m8, 0, m13, m12)
 // S8 = (m9, 0, 0, m15, m14, 0, m9, m8)
 // S9 = (m8, 0, 0, 0, m15, 0, m12, m11)
+//
 #[inline(always)]
 pub fn fast_reduction(a: &[u32; 16], modulus: &[u32; 8]) -> [u32; 8] {
     let mut s: [[u32; 8]; 10] = [[0; 8]; 10];
@@ -144,10 +150,12 @@ pub fn fast_reduction(a: &[u32; 16], modulus: &[u32; 8]) -> [u32; 8] {
     }
 
     s[0] = [m[7], m[6], m[5], m[4], m[3], m[2], m[1], m[0]];
+
     s[1] = [m[15], 0, 0, 0, 0, 0, m[15], m[14]];
     s[2] = [m[14], 0, 0, 0, 0, 0, m[14], m[13]];
     s[3] = [m[13], 0, 0, 0, 0, 0, 0, 0];
     s[4] = [m[12], 0, m[15], m[14], m[13], 0, 0, m[15]];
+
     s[5] = [m[15], m[15], m[14], m[13], m[12], 0, m[11], m[10]];
     s[6] = [m[11], m[14], m[13], m[12], m[11], 0, m[10], m[9]];
     s[7] = [m[10], m[11], m[10], m[9], m[8], 0, m[13], m[12]];
@@ -155,63 +163,62 @@ pub fn fast_reduction(a: &[u32; 16], modulus: &[u32; 8]) -> [u32; 8] {
     s[9] = [m[8], 0, 0, 0, m[15], 0, m[12], m[11]];
 
     let mut carry: i32 = 0;
-    let mut sum = [0; 8];
+    let mut ret = [0; 8];
 
     // part1: 2 * (s1+s2+s3+s4)
-    let (rt, rc) = add_raw(&sum, &s[1]);
-    sum = rt;
+    let (rt, rc) = add_raw(&ret, &s[1]);
+    ret = rt;
     carry += rc as i32;
-    let (rt, rc) = add_raw(&sum, &s[2]);
-    sum = rt;
+    let (rt, rc) = add_raw(&ret, &s[2]);
+    ret = rt;
     carry += rc as i32;
-    let (rt, rc) = add_raw(&sum, &s[3]);
-    sum = rt;
+    let (rt, rc) = add_raw(&ret, &s[3]);
+    ret = rt;
     carry += rc as i32;
-    let (rt, rc) = add_raw(&sum, &s[4]);
-    sum = rt;
+    let (rt, rc) = add_raw(&ret, &s[4]);
+    ret = rt;
     carry += rc as i32;
-    let (rt, rc) = add_raw(&sum, &sum);
-    sum = rt;
+    let (rt, rc) = add_raw(&ret, &ret);
+    ret = rt;
     carry = carry * 2 + rc as i32;
 
     // part2: s0+s5+s6+s7+s8+s9
-    let (rt, rc) = add_raw(&sum, &s[5]);
-    sum = rt;
+    let (rt, rc) = add_raw(&ret, &s[5]);
+    ret = rt;
     carry += rc as i32;
-    let (rt, rc) = add_raw(&sum, &s[6]);
-    sum = rt;
+    let (rt, rc) = add_raw(&ret, &s[6]);
+    ret = rt;
     carry += rc as i32;
-    let (rt, rc) = add_raw(&sum, &s[7]);
-    sum = rt;
+    let (rt, rc) = add_raw(&ret, &s[7]);
+    ret = rt;
     carry += rc as i32;
-    let (rt, rc) = add_raw(&sum, &s[8]);
-    sum = rt;
+    let (rt, rc) = add_raw(&ret, &s[8]);
+    ret = rt;
     carry += rc as i32;
-    let (rt, rc) = add_raw(&sum, &s[9]);
-    sum = rt;
+    let (rt, rc) = add_raw(&ret, &s[9]);
+    ret = rt;
     carry += rc as i32;
-    let (rt, rc) = add_raw(&sum, &s[0]);
-    sum = rt;
+    let (rt, rc) = add_raw(&ret, &s[0]);
+    ret = rt;
     carry += rc as i32;
 
     // part3:  m8+m9+m13+m14
     let mut part3 = [0; 8];
-    let rt: u64 = u64::from(m[8]) + u64::from(m[9]) + u64::from(m[13]) + u64::from(m[14]);
-    part3[5] = (rt & 0xffff_ffff) as u32;
-    part3[4] = (rt >> 32) as u32;
+    let subtra: u64 = u64::from(m[8]) + u64::from(m[9]) + u64::from(m[13]) + u64::from(m[14]);
+    part3[5] = (subtra & 0xffff_ffff) as u32;
+    part3[4] = (subtra >> 32) as u32;
 
     // part1 + part2 - part3
-    let (rt, rc) = sub_raw(&sum, &part3);
-    sum = rt;
+    let (rt, rc) = sub_raw(&ret, &part3);
+    ret = rt;
     carry -= rc as i32;
 
-    //
-    while carry > 0 || sum >= *modulus {
-        let (rs, rb) = sub_raw(&sum, modulus);
-        sum = rs;
+    while carry > 0 || ret >= *modulus {
+        let (rs, rb) = sub_raw(&ret, modulus);
+        ret = rs;
         carry -= rb as i32;
     }
-    sum
+    ret
 }
 
 impl FeOperation for BigUint {

@@ -49,7 +49,6 @@ pub trait FeOperation {
 
 #[cfg(test)]
 mod test_sm2 {
-    use crypto_bigint::U256;
     use crate::sm2::exchange;
     use crate::sm2::key::{gen_keypair, CompressModle};
 
