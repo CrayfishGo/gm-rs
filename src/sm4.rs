@@ -73,125 +73,113 @@ impl Display for Sm4Error {
     }
 }
 
-fn bytes_to_word(input: &[u8]) -> u32 {
-    let out: u32 = u32::from(input[3]);
-    let out = out | (u32::from(input[2]) << 8);
-    let out = out | (u32::from(input[1]) << 16);
-    out | (u32::from(input[0]) << 24)
+
+#[inline]
+fn tau(a: u32) -> u32 {
+    let mut buf = a.to_be_bytes();
+    buf[0] = SBOX[buf[0] as usize];
+    buf[1] = SBOX[buf[1] as usize];
+    buf[2] = SBOX[buf[2] as usize];
+    buf[3] = SBOX[buf[3] as usize];
+    u32::from_be_bytes(buf)
 }
 
-fn split_block(input: &[u8]) -> Sm4Result<[u32; 4]> {
-    if input.len() != 16 {
-        return Err(Sm4Error::ErrorBlockSize);
-    }
-    let mut out: [u32; 4] = [0; 4];
-    for (i, v) in out.iter_mut().enumerate().take(4) {
-        let start = 4 * i;
-        let end = 4 * i + 4;
-        *v = bytes_to_word(&input[start..end])
-    }
-    Ok(out)
+/// L: linear transformation
+#[inline]
+fn el(b: u32) -> u32 {
+    b ^ b.rotate_left(2) ^ b.rotate_left(10) ^ b.rotate_left(18) ^ b.rotate_left(24)
 }
 
-fn word_to_bytes(input: u32) -> [u8; 4] {
-    let i4: u8 = input as u8;
-    let i3: u8 = (input >> 8) as u8;
-    let i2: u8 = (input >> 16) as u8;
-    let i1: u8 = (input >> 24) as u8;
-    [i1, i2, i3, i4]
+#[inline]
+fn el_prime(b: u32) -> u32 {
+    b ^ b.rotate_left(13) ^ b.rotate_left(23)
 }
 
-fn tau_trans(input: u32) -> u32 {
-    let input = word_to_bytes(input);
-    let mut out: [u8; 4] = [0; 4];
-    for i in 0..4 {
-        out[i] = SBOX[input[i] as usize];
-    }
-    bytes_to_word(&out)
+#[inline]
+fn t(val: u32) -> u32 {
+    el(tau(val))
 }
 
-fn l_rotate(x: u32, i: u32) -> u32 {
-    (x << (i % 32)) | (x >> (32 - (i % 32)))
-}
-
-fn l_trans(input: u32) -> u32 {
-    let b = input;
-    b ^ l_rotate(b, 2) ^ l_rotate(b, 10) ^ l_rotate(b, 18) ^ l_rotate(b, 24)
-}
-
-fn t_trans(input: u32) -> u32 {
-    l_trans(tau_trans(input))
-}
-
-fn l_prime_trans(input: u32) -> u32 {
-    let b = input;
-    b ^ l_rotate(b, 13) ^ l_rotate(b, 23)
-}
-
-fn t_prime_trans(input: u32) -> u32 {
-    l_prime_trans(tau_trans(input))
-}
-
-fn combine_block(input: &[u32]) -> Sm4Result<Vec<u8>> {
-    let mut out: [u8; 16] = [0; 16];
-    for i in 0..4 {
-        let outi = word_to_bytes(input[i]);
-        for j in 0..4 {
-            out[i * 4 + j] = outi[j];
-        }
-    }
-    Ok(out.to_vec())
+#[inline]
+fn t_prime(val: u32) -> u32 {
+    el_prime(tau(val))
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Sm4Cipher {
-    rk: Vec<u32>,
+    rk: [u32; 32],
 }
 
 impl Sm4Cipher {
     pub fn new(k: &[u8]) -> Sm4Result<Sm4Cipher> {
-        let mut cipher = Sm4Cipher { rk: Vec::new() };
-        let mut k = split_block(k)?;
-        for i in 0..4 {
-            k[i] ^= FK[i];
-        }
+        let mut rk = [0u32; 32];
+        let mk = [
+            u32::from_be_bytes(k[0..4].try_into().unwrap()),
+            u32::from_be_bytes(k[4..8].try_into().unwrap()),
+            u32::from_be_bytes(k[8..12].try_into().unwrap()),
+            u32::from_be_bytes(k[12..16].try_into().unwrap()),
+        ];
+        let mut k = [mk[0] ^ FK[0], mk[1] ^ FK[1], mk[2] ^ FK[2], mk[3] ^ FK[3]];
+
         for i in 0..8 {
-            k[0] ^= t_prime_trans(k[1] ^ k[2] ^ k[3] ^ CK[i * 4]);
-            k[1] ^= t_prime_trans(k[2] ^ k[3] ^ k[0] ^ CK[i * 4 + 1]);
-            k[2] ^= t_prime_trans(k[3] ^ k[0] ^ k[1] ^ CK[i * 4 + 2]);
-            k[3] ^= t_prime_trans(k[0] ^ k[1] ^ k[2] ^ CK[i * 4 + 3]);
-            cipher.rk.push(k[0]);
-            cipher.rk.push(k[1]);
-            cipher.rk.push(k[2]);
-            cipher.rk.push(k[3]);
+            k[0] ^= t_prime(k[1] ^ k[2] ^ k[3] ^ CK[i * 4]);
+            k[1] ^= t_prime(k[2] ^ k[3] ^ k[0] ^ CK[i * 4 + 1]);
+            k[2] ^= t_prime(k[3] ^ k[0] ^ k[1] ^ CK[i * 4 + 2]);
+            k[3] ^= t_prime(k[0] ^ k[1] ^ k[2] ^ CK[i * 4 + 3]);
+
+            rk[i * 4] = k[0];
+            rk[i * 4 + 1] = k[1];
+            rk[i * 4 + 2] = k[2];
+            rk[i * 4 + 3] = k[3];
         }
-        Ok(cipher)
+        Ok(Sm4Cipher { rk })
     }
 
-    pub fn encrypt(&self, data: &[u8]) -> Sm4Result<Vec<u8>> {
-        let mut x: [u32; 4] = split_block(data)?;
+    pub fn encrypt(&self, block: &[u8]) -> Sm4Result<Vec<u8>> {
+        let mut x = [
+            u32::from_be_bytes(block[0..4].try_into().unwrap()),
+            u32::from_be_bytes(block[4..8].try_into().unwrap()),
+            u32::from_be_bytes(block[8..12].try_into().unwrap()),
+            u32::from_be_bytes(block[12..16].try_into().unwrap()),
+        ];
+
         let rk = &self.rk;
         for i in 0..8 {
-            x[0] ^= t_trans(x[1] ^ x[2] ^ x[3] ^ rk[i * 4]);
-            x[1] ^= t_trans(x[2] ^ x[3] ^ x[0] ^ rk[i * 4 + 1]);
-            x[2] ^= t_trans(x[3] ^ x[0] ^ x[1] ^ rk[i * 4 + 2]);
-            x[3] ^= t_trans(x[0] ^ x[1] ^ x[2] ^ rk[i * 4 + 3]);
+            x[0] ^= t(x[1] ^ x[2] ^ x[3] ^ rk[i * 4]);
+            x[1] ^= t(x[2] ^ x[3] ^ x[0] ^ rk[i * 4 + 1]);
+            x[2] ^= t(x[3] ^ x[0] ^ x[1] ^ rk[i * 4 + 2]);
+            x[3] ^= t(x[0] ^ x[1] ^ x[2] ^ rk[i * 4 + 3]);
         }
-        let y = [x[3], x[2], x[1], x[0]];
-        combine_block(&y)
+
+        let mut out: [u8; 16] = [0; 16];
+        out[0..4].copy_from_slice(&x[3].to_be_bytes());
+        out[4..8].copy_from_slice(&x[2].to_be_bytes());
+        out[8..12].copy_from_slice(&x[1].to_be_bytes());
+        out[12..16].copy_from_slice(&x[0].to_be_bytes());
+
+        Ok(out.to_vec())
     }
 
-    pub fn decrypt(&self, data: &[u8]) -> Sm4Result<Vec<u8>> {
-        let mut x: [u32; 4] = split_block(data)?;
+    pub fn decrypt(&self, block: &[u8]) -> Sm4Result<Vec<u8>> {
+        let mut x = [
+            u32::from_be_bytes(block[0..4].try_into().unwrap()),
+            u32::from_be_bytes(block[4..8].try_into().unwrap()),
+            u32::from_be_bytes(block[8..12].try_into().unwrap()),
+            u32::from_be_bytes(block[12..16].try_into().unwrap()),
+        ];
         let rk = &self.rk;
         for i in 0..8 {
-            x[0] ^= t_trans(x[1] ^ x[2] ^ x[3] ^ rk[31 - i * 4]);
-            x[1] ^= t_trans(x[2] ^ x[3] ^ x[0] ^ rk[31 - (i * 4 + 1)]);
-            x[2] ^= t_trans(x[3] ^ x[0] ^ x[1] ^ rk[31 - (i * 4 + 2)]);
-            x[3] ^= t_trans(x[0] ^ x[1] ^ x[2] ^ rk[31 - (i * 4 + 3)]);
+            x[0] ^= t(x[1] ^ x[2] ^ x[3] ^ rk[31 - i * 4]);
+            x[1] ^= t(x[2] ^ x[3] ^ x[0] ^ rk[31 - (i * 4 + 1)]);
+            x[2] ^= t(x[3] ^ x[0] ^ x[1] ^ rk[31 - (i * 4 + 2)]);
+            x[3] ^= t(x[0] ^ x[1] ^ x[2] ^ rk[31 - (i * 4 + 3)]);
         }
-        let y = [x[3], x[2], x[1], x[0]];
-        combine_block(&y)
+        let mut out: [u8; 16] = [0; 16];
+        out[0..4].copy_from_slice(&x[3].to_be_bytes());
+        out[4..8].copy_from_slice(&x[2].to_be_bytes());
+        out[8..12].copy_from_slice(&x[1].to_be_bytes());
+        out[12..16].copy_from_slice(&x[0].to_be_bytes());
+        Ok(out.to_vec())
     }
 }
 
@@ -429,5 +417,38 @@ impl Sm4CipherMode {
         out.resize(data_len - last_u8 as usize, 0);
 
         Ok(out)
+    }
+}
+
+#[cfg(test)]
+mod sm4test {
+    use crate::sm4::Sm4Cipher;
+    use hex_literal::hex;
+
+    #[test]
+    fn test_en_1() {
+        let key = hex!("0123456789abcdeffedcba9876543210");
+        let plaintext = key.clone();
+        let ciphertext = hex!("681edf34d206965e86b3e94f536e4246");
+
+        let cipher = Sm4Cipher::new(&key).unwrap();
+
+        let enc = cipher.encrypt(&plaintext).unwrap();
+        assert_eq!(&ciphertext, enc.as_slice());
+    }
+
+    #[test]
+    fn test_en_2() {
+        let key = hex!("0123456789abcdeffedcba9876543210");
+        let plaintext = key.clone();
+        let ciphertext = hex!("595298c7c6fd271f0402f804c33d3f66");
+
+        let cipher = Sm4Cipher::new(&key).unwrap();
+
+        let mut block = plaintext.to_vec();
+        for _ in 0..1_000_000 {
+             block = cipher.encrypt(&block.as_slice()).unwrap();
+        }
+        assert_eq!(&ciphertext, block.as_slice());
     }
 }

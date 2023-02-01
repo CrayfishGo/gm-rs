@@ -24,6 +24,7 @@ num-integer = "0.1.44"
 
 [dev-dependencies]
 criterion = "0.4"
+hex-literal = "0.3"
 
 
 [[bench]]
