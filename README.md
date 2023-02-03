@@ -8,10 +8,29 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-gm-rs = "0.6.0"
+gm-rs = "0.7.0"
 ```
 
 ## Example
+
+### SM4:
+
+```rust
+use crate::sm4::Sm4Cipher;
+use hex_literal::hex;
+
+fn main() {
+    let key = hex!("0123456789abcdeffedcba9876543210");
+    let plaintext = key.clone();
+    let ciphertext = hex!("681edf34d206965e86b3e94f536e4246");
+
+    let cipher = Sm4Cipher::new(&key).unwrap();
+
+    let enc = cipher.encrypt(&plaintext).unwrap();
+    assert_eq!(&ciphertext, enc.as_slice());
+}
+
+```
 
 ### SM3:
 

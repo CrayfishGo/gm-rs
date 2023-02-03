@@ -73,7 +73,7 @@ impl Display for Sm4Error {
     }
 }
 
-
+/// (b0 , b1 , b2 , b3 ) = τ( A) = ( Sbox ( a0 ), Sbox ( a1 ), Sbox ( a2 ), Sbox ( a3 ) )
 #[inline]
 fn tau(a: u32) -> u32 {
     let mut buf = a.to_be_bytes();
@@ -85,6 +85,7 @@ fn tau(a: u32) -> u32 {
 }
 
 /// L: linear transformation
+/// C = L(B) = B ⊕ (B <<< 2) ⊕ (B <<< 10) ⊕ (B <<< 18) ⊕ (B <<< 24)
 #[inline]
 fn el(b: u32) -> u32 {
     b ^ b.rotate_left(2) ^ b.rotate_left(10) ^ b.rotate_left(18) ^ b.rotate_left(24)
@@ -105,6 +106,21 @@ fn t_prime(val: u32) -> u32 {
     el_prime(tau(val))
 }
 
+
+/// SM4 block cipher.
+/// # Example
+/// ```rust
+/// fn main() {
+///   use hex_literal::hex;
+///   use gm_rs::sm4::Sm4Cipher;
+///   let key = hex!("0123456789abcdeffedcba9876543210");
+///   let plaintext = key.clone();
+///   let ciphertext = hex!("681edf34d206965e86b3e94f536e4246");
+///   let cipher = Sm4Cipher::new(&key).unwrap();
+///   let enc = cipher.encrypt(&plaintext).unwrap();
+///   assert_eq!(&ciphertext, enc.as_slice());
+/// }
+/// ```
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Sm4Cipher {
     rk: [u32; 32],
@@ -205,7 +221,6 @@ fn block_xor(a: &[u8], b: &[u8]) -> [u8; 16] {
 
 fn block_add_one(a: &mut [u8]) {
     let mut carry = 1;
-
     for i in 0..16 {
         let (t, c) = a[15 - i].overflowing_add(carry);
         a[15 - i] = t;
