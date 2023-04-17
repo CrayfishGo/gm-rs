@@ -1,6 +1,6 @@
 # gm-rs
 
-A Pure Rust High-Performance Implementation of China's Standards of Encryption Algorithms(SM2/SM3/SM4)
+A Pure Rust High-Performance Implementation of China's Standards of Encryption Algorithms SM2
 
 ## Usage
 
@@ -8,49 +8,15 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-gm-rs = "0.7.0"
+gm-sm2 = "0.9.0"
 ```
 
 ## Example
 
-### SM4:
+### encrypt & decrypt
 
 ```rust
-use crate::sm4::Sm4Cipher;
-use hex_literal::hex;
-
-fn main() {
-    let key = hex!("0123456789abcdeffedcba9876543210");
-    let plaintext = key.clone();
-    let ciphertext = hex!("681edf34d206965e86b3e94f536e4246");
-
-    let cipher = Sm4Cipher::new(&key).unwrap();
-
-    let enc = cipher.encrypt(&plaintext).unwrap();
-    assert_eq!(&ciphertext, enc.as_slice());
-}
-
-```
-
-### SM3:
-
-```rust
-use crate::sm3::sm3_hash;
-
-fn main() {
-    let hash = sm3_hash(b"abc");
-    let r = hex::encode(hash.as_ref().unwrap());
-    assert_eq!("66c7f0f462eeedd9d1f2d46bdc10e4e24167c4875cf2f7a2297da02b8f4ba8e0", r);
-}
-
-```
-
-### SM2:
-
-#### encrypt & decrypt
-
-```rust
- use crate::sm2::key::{gen_keypair, CompressModle};
+ use crate::key::{gen_keypair, CompressModle};
 
 fn main() {
     let (pk, sk) = gen_keypair(CompressModle::Compressed).unwrap();
@@ -62,10 +28,10 @@ fn main() {
 
 ```
 
-#### sign & verify
+### sign & verify
 
 ```rust
-use crate::sm2::signature;
+use crate::signature;
 
 fn main() {
     let msg = b"hello";
@@ -77,9 +43,9 @@ fn main() {
 ```
 
 
-#### key exchange
+### key exchange
 ```rust
-use crate::sm2::exchange::Exchange;
+use crate::exchange::Exchange;
 
 fn main() {
     let id_a = "alice123@qq.com";

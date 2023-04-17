@@ -1,21 +1,3 @@
-[package]
-name = "gm-rs"
-version = "0.8.0"
-edition = "2021"
-
-description = "A Rust Implementation of China's Standards of Encryption Algorithms(SM2/SM3/SM4)"
-authors = ["evanyang1120@163.com"]
-homepage = "https://github.com/CrayfishGo/gm-rs.git"
-license = "MIT"
-keywords = ["sm2", "sm3", "sm4", "zuc"]
-categories = ["cryptography"]
-readme = "README.md"
-documentation = "https://docs.rs/gm-rs/"
-
-[dependencies]
-
-
-
 [workspace]
 members = [
     "gm-sm2",

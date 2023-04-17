@@ -1,8 +1,16 @@
 [package]
 name = "gm-zuc"
-version = "0.1.0"
+version = "0.9.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+description = "A Rust Implementation of China's Standards of Encryption Algorithms ZUC"
+authors = ["evanyang1120@163.com"]
+homepage = "https://github.com/CrayfishGo/gm-rs.git"
+license = "MIT"
+keywords = ["ZUC"]
+categories = ["cryptography"]
+readme = "README.md"
+documentation = "https://docs.rs/gm-rs/"
 
 [dependencies]

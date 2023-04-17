@@ -1,6 +1,6 @@
 [package]
 name = "gm-sm2"
-version = "0.1.0"
+version = "0.9.0"
 edition = "2021"
 
 description = "A Rust Implementation of China's Standards of Encryption Algorithms SM2"

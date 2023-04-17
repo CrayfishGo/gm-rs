@@ -1,4 +1,3 @@
-
 pub mod error;
 pub mod exchange;
 pub(crate) mod formulas;
@@ -51,9 +50,7 @@ pub trait FeOperation {
 #[cfg(test)]
 mod test_sm2 {
     use crate::exchange;
-    use crate::key::{CompressModle, gen_keypair};
-    use crate::sm2::exchange;
-    use crate::sm2::key::{gen_keypair, CompressModle};
+    use crate::key::{gen_keypair, CompressModle};
 
     #[test]
     fn test_gen_keypair() {
@@ -91,5 +88,4 @@ mod test_sm2 {
         assert_eq!(succ, true);
         assert_eq!(alice.k, bob.k);
     }
-
 }
