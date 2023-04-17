@@ -1,3 +1,6 @@
+
+#![doc = include_str!("../README.md")]
+
 use std::fmt::{Display, Formatter};
 
 pub enum Sm3Error {

@@ -1,3 +1,6 @@
+
+#![doc = include_str!("../README.md")]
+
 use std::error;
 use std::fmt::{Display, Formatter};
 
