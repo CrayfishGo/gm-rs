@@ -13,20 +13,13 @@ readme = "README.md"
 documentation = "https://docs.rs/gm-rs/"
 
 [dependencies]
-byteorder = "1.0.0"
-rand = "0.8.4"
-lazy_static = "1.4.0"
-base64 = "0.21.0"
-hex = "0.4"
-num-traits = "0.2.14"
-num-bigint = { version = "0.8.1", features = ["i128", "u64_digit"], default-features = false, package = "num-bigint-dig" }
-num-integer = "0.1.44"
-
-[dev-dependencies]
-criterion = "0.4"
-hex-literal = "0.3"
 
 
-[[bench]]
-name = "sm2"
-harness = false
+
+[workspace]
+members = [
+    "gm-sm2",
+    "gm-sm3",
+    "gm-sm4",
+    "gm-zuc"
+]
