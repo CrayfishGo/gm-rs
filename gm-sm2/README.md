@@ -1,15 +1,7 @@
-# gm-rs
+# gm-sm2
 
 A Pure Rust High-Performance Implementation of China's Standards of Encryption Algorithms SM2
 
-## Usage
-
-Add this to your `Cargo.toml`:
-
-```toml
-[dependencies]
-gm-sm2 = "0.9.0"
-```
 
 ## Example
 

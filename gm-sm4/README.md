@@ -1,15 +1,7 @@
-# gm-rs
+# gm-sm4
 
 A Pure Rust High-Performance Implementation of China's Standards of Encryption Algorithms SM4
 
-## Usage
-
-Add this to your `Cargo.toml`:
-
-```toml
-[dependencies]
-gm-sm4 = "0.9.0"
-```
 
 ## Example
 

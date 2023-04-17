@@ -1,15 +1,7 @@
-# gm-rs
+# gm-zuc
 
 A Pure Rust High-Performance Implementation of China's Standards of Encryption Algorithms ZUC
 
-## Usage
-
-Add this to your `Cargo.toml`:
-
-```toml
-[dependencies]
-gm-zuc = "0.9.0"
-```
 
 ## Example
 

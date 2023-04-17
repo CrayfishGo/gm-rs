@@ -1,15 +1,8 @@
-# gm-rs
+# gm-sm3
 
 A Pure Rust High-Performance Implementation of China's Standards of Encryption Algorithms SM3
 
-## Usage
 
-Add this to your `Cargo.toml`:
-
-```toml
-[dependencies]
-gm-sm3 = "0.9.0"
-```
 
 ## Example
 
