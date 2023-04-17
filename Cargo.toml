@@ -1,13 +1,13 @@
 [package]
 name = "gm-rs"
-version = "0.7.0"
+version = "0.8.0"
 edition = "2021"
 
 description = "A Rust Implementation of China's Standards of Encryption Algorithms(SM2/SM3/SM4)"
 authors = ["evanyang1120@163.com"]
 homepage = "https://github.com/CrayfishGo/gm-rs.git"
 license = "MIT"
-keywords = ["sm2", "sm3", "sm4"]
+keywords = ["sm2", "sm3", "sm4", "zuc"]
 categories = ["cryptography"]
 readme = "README.md"
 documentation = "https://docs.rs/gm-rs/"
@@ -16,7 +16,7 @@ documentation = "https://docs.rs/gm-rs/"
 byteorder = "1.0.0"
 rand = "0.8.4"
 lazy_static = "1.4.0"
-base64 = "0.13.0"
+base64 = "0.21.0"
 hex = "0.4"
 num-traits = "0.2.14"
 num-bigint = { version = "0.8.1", features = ["i128", "u64_digit"], default-features = false, package = "num-bigint-dig" }
