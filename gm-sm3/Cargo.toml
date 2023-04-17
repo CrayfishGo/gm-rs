@@ -11,6 +11,6 @@ license = "MIT"
 keywords = ["sm3"]
 categories = ["cryptography"]
 readme = "README.md"
-documentation = "https://docs.rs/gm-rs/"
+documentation = "https://docs.rs/gm-sm3/"
 
 [dependencies]
