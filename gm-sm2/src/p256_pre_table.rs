@@ -1,5 +1,5 @@
-use crate::sm2::p256_ecc::Point;
-use crate::sm2::p256_field::FieldElement;
+use crate::p256_ecc::Point;
+use crate::p256_field::FieldElement;
 use lazy_static::lazy_static;
 
 #[rustfmt::skip]

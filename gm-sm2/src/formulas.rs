@@ -1,4 +1,4 @@
-use crate::sm2::p256_ecc::{Point, P256C_PARAMS};
+use crate::p256_ecc::{Point, P256C_PARAMS};
 
 //       Z1Z1 = Z12
 //       Z2Z2 = Z22

@@ -1,14 +1,14 @@
+use criterion::{BenchmarkGroup, Criterion, criterion_group, criterion_main};
 use criterion::measurement::Measurement;
-use criterion::{criterion_group, criterion_main, BenchmarkGroup, Criterion};
 use num_bigint::{ModInverse, ToBigInt};
-use rand::{thread_rng, Rng};
+use rand::{Rng, thread_rng};
 
-use gm_rs::sm2::key::{gen_keypair, CompressModle, Sm2PrivateKey, Sm2PublicKey};
-use gm_rs::sm2::montgomery::{montgomery_mod, montgomery_mul_mod};
-use gm_rs::sm2::p256_ecc::{Point, P256C_PARAMS};
-use gm_rs::sm2::p256_field::FieldElement;
-use gm_rs::sm2::p256_pre_table::PRE_TABLE_1;
-use gm_rs::sm2::FeOperation;
+use gm_sm2::FeOperation;
+use gm_sm2::key::{CompressModle, gen_keypair, Sm2PrivateKey, Sm2PublicKey};
+use gm_sm2::montgomery::{montgomery_mod, montgomery_mul_mod};
+use gm_sm2::p256_ecc::{P256C_PARAMS, Point};
+use gm_sm2::p256_field::FieldElement;
+use gm_sm2::p256_pre_table::PRE_TABLE_1;
 
 fn test_gen_keypair() -> (Sm2PublicKey, Sm2PrivateKey) {
     gen_keypair(CompressModle::Compressed).unwrap()

@@ -1,11 +1,11 @@
+use crate::error::{Sm2Error, Sm2Result};
+use crate::p256_ecc::{Point, P256C_PARAMS};
+use gm_sm3::sm3_hash;
 use num_bigint::BigUint;
 use num_traits::{FromPrimitive, One, Zero};
 
-use crate::sm2::error::{Sm2Error, Sm2Result};
-use crate::sm2::p256_ecc::{Point, P256C_PARAMS};
-use crate::sm2::util::{compute_za, kdf, random_uint, DEFAULT_ID};
-use crate::sm2::{p256_ecc, FeOperation};
-use crate::sm3::sm3_hash;
+use crate::util::{compute_za, kdf, random_uint, DEFAULT_ID};
+use crate::{p256_ecc, FeOperation};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Sm2PublicKey {

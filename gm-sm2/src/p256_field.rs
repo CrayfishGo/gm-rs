@@ -6,10 +6,9 @@ use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use num_bigint::BigUint;
 use num_traits::Num;
 
-use crate::sm2::error::{Sm2Error, Sm2Result};
-use crate::sm2::p256_ecc::P256C_PARAMS;
-use crate::sm2::{FeOperation};
-use crate::{forward_ref_ref_binop, forward_ref_val_binop, forward_val_val_binop};
+use crate::{FeOperation, forward_ref_ref_binop, forward_ref_val_binop, forward_val_val_binop};
+use crate::error::{Sm2Error, Sm2Result};
+use crate::p256_ecc::P256C_PARAMS;
 
 pub type Fe = [u32; 8];
 
@@ -237,6 +236,7 @@ impl Default for FieldElement {
 
 #[cfg(test)]
 mod test_fe{
+    use crate::p256_field::FieldElement;
     use crate::sm2::p256_field::FieldElement;
 
     #[test]

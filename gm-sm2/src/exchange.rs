@@ -1,11 +1,12 @@
-use crate::sm2::error::{Sm2Error, Sm2Result};
-use crate::sm2::key::{gen_keypair, CompressModle, Sm2PrivateKey, Sm2PublicKey};
-use crate::sm2::p256_ecc::{g_mul, scalar_mul, Point, P256C_PARAMS};
-use crate::sm2::util::{compute_za, kdf, random_uint, DEFAULT_ID};
-use crate::sm3::sm3_hash;
+
 use byteorder::{BigEndian, WriteBytesExt};
 use num_bigint::BigUint;
 use num_traits::{FromPrimitive, One, Pow};
+use gm_sm3::sm3_hash;
+use crate::error::{Sm2Error, Sm2Result};
+use crate::key::{CompressModle, gen_keypair, Sm2PrivateKey, Sm2PublicKey};
+use crate::p256_ecc::{g_mul, P256C_PARAMS, Point, scalar_mul};
+use crate::util::{compute_za, DEFAULT_ID, kdf, random_uint};
 
 #[derive(Debug)]
 pub struct Exchange {

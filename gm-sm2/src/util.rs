@@ -1,12 +1,13 @@
-use crate::sm2::error::{Sm2Error, Sm2Result};
-use crate::sm2::key::Sm2PublicKey;
-use crate::sm2::p256_ecc::P256C_PARAMS;
-use crate::sm3;
-use crate::sm3::sm3_hash;
 use byteorder::{BigEndian, WriteBytesExt};
 use num_bigint::BigUint;
 use num_traits::{One, Zero};
 use rand::RngCore;
+
+use gm_sm3::sm3_hash;
+
+use crate::error::{Sm2Error, Sm2Result};
+use crate::key::Sm2PublicKey;
+use crate::p256_ecc::P256C_PARAMS;
 
 pub(crate) const DEFAULT_ID: &'static str = "1234567812345678";
 
@@ -73,7 +74,7 @@ pub fn kdf(z: &[u8], klen: usize) -> Vec<u8> {
     prepend.extend_from_slice(z);
     prepend.extend_from_slice(&ct.to_be_bytes());
 
-    let last = sm3::sm3_hash(&prepend[..]);
+    let last = sm3_hash(&prepend[..]);
     if klen % 32 == 0 {
         h_a.extend_from_slice(&last);
     } else {
