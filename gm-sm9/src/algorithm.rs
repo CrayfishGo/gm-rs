@@ -38,14 +38,14 @@ const SM9_MU_N_MINUS_ONE: [u64; 9] = [
     0xdfc97c31,
 ];
 
-#[derive(Copy, Debug)]
+#[derive(Copy, Debug, Clone)]
 pub struct Point {
     x: [u64; 8],
     y: [u64; 8],
     z: [u64; 8],
 }
 
-#[derive(Copy, Debug)]
+#[derive(Copy, Debug, Clone)]
 pub struct TwistPoint {
     x: [[u64; 8]; 2],
     y: [[u64; 8]; 2],
