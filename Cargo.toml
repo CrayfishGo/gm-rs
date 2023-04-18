@@ -3,5 +3,6 @@ members = [
     "gm-sm2",
     "gm-sm3",
     "gm-sm4",
-    "gm-zuc"
+    "gm-zuc",
+    "gm-sm9",
 ]
