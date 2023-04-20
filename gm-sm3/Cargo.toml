@@ -14,3 +14,6 @@ readme = "README.md"
 documentation = "https://docs.rs/gm-sm3/"
 
 [dependencies]
+
+[dev-dependencies]
+hex="0.4.0"

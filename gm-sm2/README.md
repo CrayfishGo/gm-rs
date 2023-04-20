@@ -8,7 +8,7 @@ A Pure Rust High-Performance Implementation of China's Standards of Encryption A
 ### encrypt & decrypt
 
 ```rust
- use crate::key::{gen_keypair, CompressModle};
+ use gm_sm2::key::{gen_keypair, CompressModle};
 
 fn main() {
     let (pk, sk) = gen_keypair(CompressModle::Compressed).unwrap();
@@ -23,8 +23,7 @@ fn main() {
 ### sign & verify
 
 ```rust
-use crate::signature;
-
+use gm_sm2::key::{gen_keypair, CompressModle};
 fn main() {
     let msg = b"hello";
     let (pk, sk) = gen_keypair(CompressModle::Compressed).unwrap();
@@ -37,7 +36,8 @@ fn main() {
 
 ### key exchange
 ```rust
-use crate::exchange::Exchange;
+use gm_sm2::exchange::Exchange;
+use gm_sm2::key::{gen_keypair, CompressModle};
 
 fn main() {
     let id_a = "alice123@qq.com";
@@ -54,7 +54,7 @@ fn main() {
     let sa = user_a.exchange_3(&rb_point, sb).unwrap();
     let succ = user_b.exchange_4(sa, &ra_point).unwrap();
     println!("test_key_exchange = {}", succ);
-    assert_eq!(user_a.k, user_b.k);
+    // assert_eq!(user_a.k, user_b.k);
 }
 
 ```

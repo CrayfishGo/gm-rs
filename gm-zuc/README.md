@@ -6,7 +6,7 @@ A Pure Rust High-Performance Implementation of China's Standards of Encryption A
 ## Example
 
 ```rust
-use crate::ZUC;
+use gm_zuc::ZUC;
 
 fn main() {
     let key = [0u8; 16];

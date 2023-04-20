@@ -77,12 +77,9 @@ fn redc(t: BigInt, p: &BigInt, r: BigInt, q: BigInt) -> BigInt {
 
 #[cfg(test)]
 mod test_mont {
-    use core::num::flt2dec::Sign;
+    use crate::montgomery::{cus_mod, montgomery_mod, montgomery_mul_mod};
     use num_bigint::{BigInt, BigUint, Sign, ToBigInt};
     use num_traits::Num;
-    use crate::montgomery::{cus_mod, montgomery_mod, montgomery_mul_mod};
-
-    use crate::sm2::montgomery::{cus_mod, montgomery_mod, montgomery_mul_mod};
 
     #[test]
     fn test() {

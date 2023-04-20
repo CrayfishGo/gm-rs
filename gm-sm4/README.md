@@ -6,7 +6,7 @@ A Pure Rust High-Performance Implementation of China's Standards of Encryption A
 ## Example
 
 ```rust
-use crate::Sm4Cipher;
+use gm_sm4::Sm4Cipher;
 use hex_literal::hex;
 
 fn main() {

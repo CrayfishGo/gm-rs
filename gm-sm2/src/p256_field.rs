@@ -6,9 +6,9 @@ use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use num_bigint::BigUint;
 use num_traits::Num;
 
-use crate::{FeOperation, forward_ref_ref_binop, forward_ref_val_binop, forward_val_val_binop};
 use crate::error::{Sm2Error, Sm2Result};
 use crate::p256_ecc::P256C_PARAMS;
+use crate::{forward_ref_ref_binop, forward_ref_val_binop, forward_val_val_binop, FeOperation};
 
 pub type Fe = [u32; 8];
 
@@ -227,22 +227,19 @@ impl<'a> Mul<&'a FieldElement> for FieldElement {
 impl Default for FieldElement {
     #[inline]
     fn default() -> FieldElement {
-        FieldElement {
-            inner: [0; 8],
-        }
+        FieldElement { inner: [0; 8] }
     }
 }
 
-
 #[cfg(test)]
-mod test_fe{
+mod test_fe {
     use crate::p256_field::FieldElement;
-    use crate::sm2::p256_field::FieldElement;
 
     #[test]
-    fn test_mod_mul(){
+    fn test_mod_mul() {
         let a = FieldElement::new([
-            764497930, 2477372445, 473039778, 1327312203, 3110691882, 1307193102, 2665428562, 967816337,
+            764497930, 2477372445, 473039778, 1327312203, 3110691882, 1307193102, 2665428562,
+            967816337,
         ]);
         let b = FieldElement::new([
             2873589426, 3315627933, 3055686524, 325110103, 3264434653, 2512214348, 3018997295,
@@ -252,5 +249,4 @@ mod test_fe{
         let ret = a * b;
         println!("{:?}", ret)
     }
-
 }
