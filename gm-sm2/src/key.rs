@@ -14,6 +14,19 @@ pub struct Sm2PublicKey {
 }
 
 impl Sm2PublicKey {
+    pub fn new(pk: &[u8], compress_modle: CompressModle) -> Sm2Result<Sm2PublicKey> {
+        let value = Point::from_byte(pk, compress_modle)?;
+        let public_key = Self {
+            value,
+            compress_modle,
+        };
+        if public_key.is_valid() {
+            Ok(public_key)
+        } else {
+            Err(Sm2Error::InvalidPublic)
+        }
+    }
+
     pub fn is_valid(&self) -> bool {
         self.value.is_valid()
     }
@@ -126,6 +139,18 @@ pub struct Sm2PrivateKey {
 }
 
 impl Sm2PrivateKey {
+    pub fn new(sk: &[u8], compress_modle: CompressModle) -> Sm2Result<Self> {
+        let d = BigUint::from_bytes_be(sk);
+        let public_key = public_from_private(&d, compress_modle)?;
+        let private_key = Self {
+            d,
+            compress_modle,
+            public_key,
+        };
+
+        Ok(private_key)
+    }
+
     pub fn sign(&self, id: Option<&'static str>, msg: &[u8]) -> Sm2Result<Vec<u8>> {
         let id = match id {
             None => DEFAULT_ID,
