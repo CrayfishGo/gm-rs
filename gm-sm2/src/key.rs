@@ -15,13 +15,12 @@ pub struct Sm2PublicKey {
 
 impl Sm2PublicKey {
     pub fn new(pk: &[u8], compress_modle: CompressModle) -> Sm2Result<Sm2PublicKey> {
-        let value = Point::from_byte(pk, compress_modle)?;
-        let public_key = Self {
-            value,
-            compress_modle,
-        };
-        if public_key.is_valid() {
-            Ok(public_key)
+        let p = Point::from_byte(pk, compress_modle)?;
+        if p.is_valid() {
+            Ok(Self {
+                value: p,
+                compress_modle,
+            })
         } else {
             Err(Sm2Error::InvalidPublic)
         }
