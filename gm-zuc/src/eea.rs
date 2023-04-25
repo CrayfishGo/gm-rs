@@ -27,7 +27,6 @@ impl EEA {
     pub fn encrypt(&mut self, msg: &[u32], ilen: u32) -> Vec<u32> {
         let mut rs = vec![];
         let keylength = (ilen + 31) / 32;
-
         let keys = self.zuc.generate_keystream(keylength as usize);
         let keys = keys.as_slice();
         for i in 0..keylength as usize {
@@ -66,11 +65,14 @@ mod eea_test {
             0xa6c85fc6, 0x6afb8533, 0xaafc2518, 0xdfe78494, 0x0ee1e4b0, 0x30238cc8, 0x00000000,
         ];
 
+        // encrypt
         let mut eea = EEA::new(&ck, count, bearer, direction);
         let rs = eea.encrypt(&ibs, length);
-        println!("{:?}", rs);
-        for z in rs {
-            print!("{:x},", z)
-        }
+        assert_eq!(obs, rs.as_slice());
+
+        // decrypt
+        let mut eea = EEA::new(&ck, count, bearer, direction);
+        let rs = eea.encrypt(&rs, length);
+        assert_eq!(ibs, rs.as_slice());
     }
 }
