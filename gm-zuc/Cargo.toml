@@ -13,4 +13,3 @@ categories = ["cryptography"]
 readme = "README.md"
 documentation = "https://docs.rs/gm-zuc/"
 
-[dependencies]
