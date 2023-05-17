@@ -5,7 +5,7 @@ use num_traits::{Num, One};
 use crate::error::{Sm2Error, Sm2Result};
 use crate::formulas::{add_1998_cmo, double_1998_cmo};
 use crate::key::CompressModle;
-use crate::p256_field::{ECC_P, FieldElement};
+use crate::p256_field::{FieldElement, ECC_P};
 use crate::p256_pre_table::{PRE_TABLE_1, PRE_TABLE_2};
 
 lazy_static! {
@@ -489,10 +489,8 @@ mod test {
     use num_bigint::BigUint;
     use num_traits::{FromPrimitive, Num, Pow};
 
-    use crate::p256_ecc::{P256C_PARAMS, Point, pre_vec_gen, pre_vec_gen2, scalar_mul};
+    use crate::p256_ecc::{pre_vec_gen, pre_vec_gen2, scalar_mul, Point, P256C_PARAMS};
     use crate::p256_field::FieldElement;
-    use crate::sm2::p256_ecc::{P256C_PARAMS, Point, pre_vec_gen, pre_vec_gen2, scalar_mul};
-    use crate::sm2::p256_field::FieldElement;
 
     #[test]
     fn test_g_table() {

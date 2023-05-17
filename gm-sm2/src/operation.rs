@@ -4,9 +4,9 @@ use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use num_bigint::{BigUint, ModInverse};
 use num_integer::Integer;
 
-use crate::FeOperation;
 use crate::p256_field::{Conversion, Fe, FieldElement};
 use crate::util::{add_raw, mul_raw, sub_raw};
+use crate::FeOperation;
 
 impl Conversion for Fe {
     fn fe_to_bigunit(&self) -> BigUint {
@@ -255,13 +255,11 @@ impl FeOperation for BigUint {
 #[cfg(test)]
 mod test_op {
     use num_bigint::ModInverse;
-    use rand::{Rng, thread_rng};
+    use rand::{thread_rng, Rng};
 
     use crate::p256_ecc::P256C_PARAMS;
     use crate::p256_pre_table::PRE_TABLE_1;
-    use crate::sm2::FeOperation;
-    use crate::sm2::p256_ecc::P256C_PARAMS;
-    use crate::sm2::p256_pre_table::PRE_TABLE_1;
+    use crate::FeOperation;
 
     #[test]
     fn test_mod_add() {
