@@ -1,29 +1,30 @@
 use std::str::FromStr;
 
-use pkcs8::{DecodePublicKey, der, Document, EncodePrivateKey, EncodePublicKey, PrivateKeyInfo, SecretDocument, SubjectPublicKeyInfoRef};
-use pkcs8::der::{Decode, Encode};
 use pkcs8::der::zeroize::Zeroizing;
+use pkcs8::der::{Decode, Encode};
+use pkcs8::{
+    der, DecodePublicKey, Document, EncodePrivateKey, EncodePublicKey, PrivateKeyInfo,
+    SecretDocument, SubjectPublicKeyInfoRef,
+};
 use sec1::EcPrivateKey;
 
-use crate::{ALGORITHM_IDENTIFIER, ALGORITHM_OID, OID_SM2_PKCS8};
 use crate::error::Sm2Result;
 use crate::key::{Sm2PrivateKey, Sm2PublicKey};
 use crate::p256_ecc::Point;
+use crate::{ALGORITHM_IDENTIFIER, ALGORITHM_OID, OID_SM2_PKCS8};
 
 impl Sm2PrivateKey {
     pub fn to_sec1_der(&self) -> der::Result<Zeroizing<Vec<u8>>> {
-        let private_key_bytes = Zeroizing::new(self.d.to_bytes_be());
+        let private_key_bytes = Zeroizing::new(self.to_bytes_be());
         let public_key_bytes = self.public_key.to_bytes(false);
-
         let ec_private_key = Zeroizing::new(
             EcPrivateKey {
                 private_key: &private_key_bytes,
                 parameters: None,
                 public_key: Some(&public_key_bytes),
             }
-                .to_der()?,
+            .to_der()?,
         );
-
         Ok(ec_private_key)
     }
 }
@@ -32,12 +33,10 @@ impl TryFrom<EcPrivateKey<'_>> for Sm2PrivateKey {
     type Error = der::Error;
 
     fn try_from(sec1_private_key: EcPrivateKey<'_>) -> Result<Self, Self::Error> {
-        let sk = Self::new(sec1_private_key.private_key).map_err(|_| der::Tag::Sequence.value_error())?;
-
+        let sk = Self::new(sec1_private_key.private_key)
+            .map_err(|_| der::Tag::Sequence.value_error())?;
         if let Some(pk_bytes) = sec1_private_key.public_key {
-            let pk = Point::from_byte(pk_bytes)
-                .map_err(|_| der::Tag::BitString.value_error())?;
-
+            let pk = Point::from_byte(pk_bytes).map_err(|_| der::Tag::BitString.value_error())?;
             if validate_public_key(&sk, &pk).is_err() {
                 return Err(der::Tag::BitString.value_error());
             }
@@ -95,15 +94,13 @@ impl EncodePublicKey for Sm2PublicKey {
     fn to_public_key_der(&self) -> pkcs8::spki::Result<Document> {
         let public_key_bytes = self.to_bytes(false);
         let subject_public_key = der::asn1::BitStringRef::new(0, &public_key_bytes)?;
-
         pkcs8::SubjectPublicKeyInfo {
             algorithm: ALGORITHM_IDENTIFIER,
             subject_public_key,
         }
-            .try_into()
+        .try_into()
     }
 }
-
 
 impl FromStr for Sm2PublicKey {
     type Err = pkcs8::spki::Error;
@@ -119,24 +116,35 @@ mod test_pkcs {
 
     use crate::key::{gen_keypair, Sm2Model, Sm2PrivateKey, Sm2PublicKey};
 
+    const SM2_PUBLIC_PEM_EXAMPLE: &str = include_str!("../pki/public_key_pkcs8.pem");
+    const SM2_PRIVATE_PEM_EXAMPLE: &str = include_str!("../pki/private_key_pkcs8.pem");
+
     #[test]
     fn test_pkcs8() {
         let (pk, sk) = gen_keypair().unwrap();
+        let pub_str = pk.to_public_key_pem(LineEnding::CRLF).unwrap();
+        let pri_str = sk.to_pkcs8_pem(LineEnding::CRLF).unwrap();
+        println!("{}", pub_str.as_str());
+        println!("{}", pri_str.as_str());
+
+        println!("pub key hex: {:?}", pk.to_hex_string(false));
+        println!("pri key hex: {:?}", sk.to_hex_string());
+
+        let sk = Sm2PrivateKey::from_pkcs8_pem(pri_str.as_str()).unwrap();
+        let pk = Sm2PublicKey::from_public_key_pem(pub_str.as_str()).unwrap();
         let msg = "你好 world,asjdkajhdjadahkubbhj12893718927391873891,@@！！ world,1231 wo12321321313asdadadahello world，hello world".as_bytes();
         let encrypt = pk.encrypt(msg, false, Sm2Model::C1C2C3).unwrap();
         let plain = sk.decrypt(&encrypt, false, Sm2Model::C1C2C3).unwrap();
-        let pub_str = pk.to_public_key_pem(LineEnding::CRLF);
-        let pri_str = sk.to_pkcs8_pem(LineEnding::CRLF);
-        println!("{:?}", pub_str);
-        println!("{:?}", pri_str);
+        assert_eq!(msg, plain)
+    }
 
-        println!("pub key: {:?}", pk);
-        println!("pri key: {:?}", sk);
-
-        let sk2 = Sm2PrivateKey::from_pkcs8_der(pri_str.unwrap().as_str().as_bytes());
-        let pk2 = Sm2PublicKey::from_public_key_pem(pub_str.unwrap().as_str());
-        println!("pub2 key: {:?}", pk2);
-        println!("pri2 key: {:?}", sk2);
+    #[test]
+    fn test_pkcs8_from_pem_file() {
+        let sk = Sm2PrivateKey::from_pkcs8_pem(SM2_PRIVATE_PEM_EXAMPLE).unwrap();
+        let pk = Sm2PublicKey::from_public_key_pem(SM2_PUBLIC_PEM_EXAMPLE).unwrap();
+        let msg = "你好 world,asjdkajhdjadahkubbhj12893718927391873891,@@！！ world,1231 wo12321321313asdadadahello world，hello world".as_bytes();
+        let encrypt = pk.encrypt(msg, false, Sm2Model::C1C2C3).unwrap();
+        let plain = sk.decrypt(&encrypt, false, Sm2Model::C1C2C3).unwrap();
         assert_eq!(msg, plain)
     }
 }

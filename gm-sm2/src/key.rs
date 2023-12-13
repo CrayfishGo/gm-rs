@@ -176,6 +176,11 @@ impl Sm2PrivateKey {
         Ok(private_key)
     }
 
+    #[inline]
+    pub fn to_bytes_be(&self) -> Vec<u8> {
+        self.d.to_bytes_be()
+    }
+
     pub fn sign(&self, id: Option<&'static str>, msg: &[u8]) -> Sm2Result<Vec<u8>> {
         let id = match id {
             None => DEFAULT_ID,

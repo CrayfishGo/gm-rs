@@ -92,8 +92,8 @@ mod test_sm2 {
 
     #[test]
     fn test_encrypt_decrypt2() {
-        let public_key = "049173f9d61be088cbffba1185d207da01f7ae573362ad92a75b525e77a8a296e08e1686f1a372437e532478171bcd4c4702502f98f749ff8918e5231a3d8874cf";
-        let private_key = "15432dca3e9056149fb169e80f97201794a7edf35c6976bf35cef28a71d1309f";
+        let public_key = "048626c62a8582c639cb3c87b59118713a519988c5f6497f91dd672abbdaaed0420ea7bc2cd03a7c938adc42b450549d312bec823b74cf22cf57c63cebd011c595";
+        let private_key = "eb20009ffbffc90aeeb288ca7d782c722332d1d16a206cafec7dd6c64e6fc525";
         let pk = Sm2PublicKey::from_hex_string(public_key).unwrap();
         let sk = Sm2PrivateKey::from_hex_string(private_key).unwrap();
 
