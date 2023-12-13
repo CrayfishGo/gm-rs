@@ -6,3 +6,4 @@ members = [
     "gm-zuc",
     "gm-sm9",
 ]
+resolver = "2"

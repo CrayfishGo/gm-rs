@@ -29,6 +29,23 @@ gm-sm3 = { version = "0.10.0", path = "../gm-sm3" }
 criterion = "0.4"
 hex-literal = "0.3"
 
+[dependencies.pkcs8]
+version = "0.10.2"
+features = ["alloc", "pem"]
+default-features = false
+
+[dependencies.sec1]
+version = "0.7.3"
+features = [
+    "subtle",
+    "zeroize",
+]
+optional = true
+
+
+[features]
+default = ["sec1"]
+
 [[bench]]
 name = "sm2"
 harness = false

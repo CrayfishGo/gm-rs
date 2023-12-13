@@ -3,6 +3,10 @@
 
 use std::error;
 use std::fmt::{Display, Formatter};
+use const_oid::ObjectIdentifier;
+
+
+pub const OID_SM4: ObjectIdentifier = ObjectIdentifier::new_unwrap("1.2.156.10197.1.104");
 
 static SBOX: [u8; 256] = [
     0xd6, 0x90, 0xe9, 0xfe, 0xcc, 0xe1, 0x3d, 0xb7, 0x16, 0xb6, 0x14, 0xc2, 0x28, 0xfb, 0x2c, 0x05,

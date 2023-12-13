@@ -1,11 +1,13 @@
-use crate::error::{Sm2Error, Sm2Result};
-use crate::key::{gen_keypair, CompressModle, Sm2PrivateKey, Sm2PublicKey};
-use crate::p256_ecc::{g_mul, scalar_mul, Point, P256C_PARAMS};
-use crate::util::{compute_za, kdf, random_uint, DEFAULT_ID};
 use byteorder::{BigEndian, WriteBytesExt};
-use gm_sm3::sm3_hash;
 use num_bigint::BigUint;
 use num_traits::{FromPrimitive, One, Pow};
+
+use gm_sm3::sm3_hash;
+
+use crate::error::{Sm2Error, Sm2Result};
+use crate::key::{gen_keypair, Sm2PrivateKey, Sm2PublicKey};
+use crate::p256_ecc::{g_mul, P256C_PARAMS, Point, scalar_mul};
+use crate::util::{compute_za, DEFAULT_ID, kdf, random_uint};
 
 #[derive(Debug)]
 pub struct Exchange {
@@ -28,8 +30,8 @@ pub fn build_ex_pair(
     first_id: &str,
     other_id: &str,
 ) -> Sm2Result<(Exchange, Exchange)> {
-    let (pk_a, sk_a) = gen_keypair(CompressModle::Compressed).unwrap();
-    let (pk_b, sk_b) = gen_keypair(CompressModle::Compressed).unwrap();
+    let (pk_a, sk_a) = gen_keypair().unwrap();
+    let (pk_b, sk_b) = gen_keypair().unwrap();
     let user_a = Exchange::new(klen, Some(first_id), &pk_a, &sk_a, Some(other_id), &pk_b).unwrap();
     let user_b = Exchange::new(klen, Some(other_id), &pk_b, &sk_b, Some(first_id), &pk_a).unwrap();
     Ok((user_a, user_b))
@@ -91,13 +93,13 @@ impl Exchange {
         let r2_point = g_mul(&r2);
         self.r = Some(r2);
         self.r_point = Some(r2_point);
-        let r2_point_affine = r2_point.to_affine();
+        let r2_point_affine = r2_point.to_affine_point();
         let x2 = r2_point_affine.x;
         let y2 = r2_point_affine.y;
         let x2_b = &pow_w + (x2.to_biguint() & (&pow_w - BigUint::one()));
         let t2 = (&self.sk.d + self.r.as_ref().unwrap() * &x2_b) % n;
 
-        let ra_point_affine = ra_point.to_affine();
+        let ra_point_affine = ra_point.to_affine_point();
         let x1 = ra_point_affine.x;
         let y1 = ra_point_affine.y;
         let x1_a = &pow_w + (x1.to_biguint() & (&pow_w - BigUint::one()));
@@ -109,7 +111,7 @@ impl Exchange {
         }
         self.v = Some(v_point);
 
-        let v_affine_p = v_point.to_affine();
+        let v_affine_p = v_point.to_affine_point();
         let xv_bytes = v_affine_p.x.to_bytes_be();
         let yv_bytes = v_affine_p.y.to_bytes_be();
 
@@ -148,13 +150,13 @@ impl Exchange {
         let w = ((n.bits() as f64) / 2.0).ceil() - 1.0;
         let pow_w = BigUint::from_u32(2).unwrap().pow(w as u32);
 
-        let ra_point_affine = self.r_point.unwrap().to_affine();
+        let ra_point_affine = self.r_point.unwrap().to_affine_point();
         let x1 = ra_point_affine.x;
         let y1 = ra_point_affine.y;
         let x1_a = &pow_w + (x1.to_biguint() & (&pow_w - BigUint::one()));
         let t_a = (&self.sk.d + x1_a * self.r.as_ref().unwrap()) % n;
 
-        let rb_point_affine = rb_point.to_affine();
+        let rb_point_affine = rb_point.to_affine_point();
         let x2 = rb_point_affine.x;
         let y2 = rb_point_affine.y;
         let x2_b = &pow_w + (x2.to_biguint() & (&pow_w - BigUint::one()));
@@ -165,7 +167,7 @@ impl Exchange {
             return Err(Sm2Error::ZeroPoint);
         }
 
-        let u_affine_p = u_point.to_affine();
+        let u_affine_p = u_point.to_affine_point();
         let xu_bytes = u_affine_p.x.to_bytes_be();
         let yu_bytes = u_affine_p.y.to_bytes_be();
 
@@ -207,15 +209,15 @@ impl Exchange {
 
     // Step4: UserA Call
     pub fn exchange_4(&self, sa: [u8; 32], ra_point: &Point) -> Sm2Result<bool> {
-        let ra_point_affine = ra_point.to_affine();
+        let ra_point_affine = ra_point.to_affine_point();
         let x1 = ra_point_affine.x;
         let y1 = ra_point_affine.y;
 
-        let r2_point_affine = self.r_point.unwrap().to_affine();
+        let r2_point_affine = self.r_point.unwrap().to_affine_point();
         let x2 = r2_point_affine.x;
         let y2 = r2_point_affine.y;
 
-        let v_point_affine = self.v.unwrap().to_affine();
+        let v_point_affine = self.v.unwrap().to_affine_point();
         let xv = v_point_affine.x;
         let yv = v_point_affine.y;
 

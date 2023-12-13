@@ -4,8 +4,7 @@ use num_traits::{Num, One};
 
 use crate::error::{Sm2Error, Sm2Result};
 use crate::formulas::{add_1998_cmo, double_1998_cmo};
-use crate::key::CompressModle;
-use crate::p256_field::{FieldElement, ECC_P};
+use crate::p256_field::{ECC_P, FieldElement};
 use crate::p256_pre_table::{PRE_TABLE_1, PRE_TABLE_2};
 
 lazy_static! {
@@ -65,7 +64,7 @@ impl CurveParameters {
             "FFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFF7203DF6B21C6052B53BBF40939D54123",
             16,
         )
-        .unwrap();
+            .unwrap();
         // a = p - 3
         let a = FieldElement::new([
             0xffff_fffe,
@@ -113,7 +112,7 @@ impl CurveParameters {
             "010000000000000000000000000000000000000000000000000000000000000000",
             16,
         )
-        .unwrap();
+            .unwrap();
         let ctx = CurveParameters {
             p,
             n,
@@ -130,13 +129,13 @@ impl CurveParameters {
                 "400000002000000010000000100000002ffffffff0000000200000003",
                 16,
             )
-            .unwrap(),
+                .unwrap(),
             r,
             q: BigInt::from_str_radix(
                 "-3fffffffe00000001ffffffff00000000fffffffeffffffffffffffff",
                 16,
             )
-            .unwrap(),
+                .unwrap(),
         };
         ctx
     }
@@ -150,7 +149,7 @@ pub struct Point {
 }
 
 impl Point {
-    pub fn to_affine(&self) -> Point {
+    pub fn to_affine_point(&self) -> Point {
         let z_inv = &self.z.modinv();
         let z_inv2 = z_inv * z_inv;
         let z_inv3 = z_inv2 * z_inv;
@@ -163,81 +162,68 @@ impl Point {
         }
     }
 
-    pub fn to_byte(&self, compress_modle: CompressModle) -> Vec<u8> {
-        let p_affine = self.to_affine();
+    pub fn to_byte_be(&self, compress: bool) -> Vec<u8> {
+        let p_affine = self.to_affine_point();
         let mut x_vec = p_affine.x.to_bytes_be();
         let mut y_vec = p_affine.y.to_bytes_be();
         let mut ret: Vec<u8> = Vec::new();
-        match compress_modle {
-            CompressModle::Compressed => {
-                if y_vec[y_vec.len() - 1] & 0x01 == 0 {
-                    ret.push(0x02);
-                } else {
-                    ret.push(0x03);
-                }
-                ret.append(&mut x_vec);
+        if compress {
+            if y_vec[y_vec.len() - 1] & 0x01 == 0 {
+                ret.push(0x02);
+            } else {
+                ret.push(0x03);
             }
-            CompressModle::Uncompressed => {
-                ret.push(0x04);
-                ret.append(&mut x_vec);
-                ret.append(&mut y_vec);
-            }
-            CompressModle::Mixed => {
-                if y_vec[y_vec.len() - 1] & 0x01 == 0 {
-                    ret.push(0x06);
-                } else {
-                    ret.push(0x07);
-                }
-                ret.append(&mut x_vec);
-                ret.append(&mut y_vec);
-            }
+            ret.append(&mut x_vec);
+        } else {
+            ret.push(0x04);
+            ret.append(&mut x_vec);
+            ret.append(&mut y_vec);
         }
         ret
     }
 
-    pub(crate) fn from_byte(b: &[u8], compress_modle: CompressModle) -> Sm2Result<Point> {
-        return match compress_modle {
-            CompressModle::Compressed => {
-                if b.len() != 33 {
-                    return Err(Sm2Error::InvalidPublic);
-                }
-                let y_q;
-                if b[0] == 0x02 {
-                    y_q = 0;
-                } else if b[0] == 0x03 {
-                    y_q = 1
-                } else {
-                    return Err(Sm2Error::InvalidPublic);
-                }
-                let x = FieldElement::from_bytes_be(&b[1..])?;
-                let xxx = &x * &x * &x;
-                let ax = &P256C_PARAMS.a * &x;
-                let yy = &xxx + &ax + &P256C_PARAMS.b;
+    pub(crate) fn from_byte(b: &[u8]) -> Sm2Result<Point> {
+        let flag = b[0];
+        // Compressed Point
+        if flag == 0x02 || flag == 0x03 {
+            if b.len() != 33 {
+                return Err(Sm2Error::InvalidPublic);
+            }
+            let y_q;
+            if b[0] == 0x02 {
+                y_q = 0;
+            } else {
+                y_q = 1
+            }
+            let x = FieldElement::from_bytes_be(&b[1..])?;
+            let xxx = &x * &x * &x;
+            let ax = &P256C_PARAMS.a * &x;
+            let yy = &xxx + &ax + &P256C_PARAMS.b;
 
-                let mut y = yy.sqrt()?;
-                let y_vec = y.to_bytes_be();
-                if y_vec[y_vec.len() - 1] & 0x01 != y_q {
-                    y = &P256C_PARAMS.p - y;
-                }
-                Ok(Point {
-                    x,
-                    y,
-                    z: FieldElement::one(),
-                })
+            let mut y = yy.sqrt()?;
+            let y_vec = y.to_bytes_be();
+            if y_vec[y_vec.len() - 1] & 0x01 != y_q {
+                y = &P256C_PARAMS.p - y;
             }
-            CompressModle::Uncompressed | CompressModle::Mixed => {
-                if b.len() != 65 {
-                    return Err(Sm2Error::InvalidPublic);
-                }
-                let x = FieldElement::from_bytes_be(&b[1..33])?;
-                let y = FieldElement::from_bytes_be(&b[33..65])?;
-                Ok(Point {
-                    x,
-                    y,
-                    z: FieldElement::one(),
-                })
+            Ok(Point {
+                x,
+                y,
+                z: FieldElement::one(),
+            })
+        }
+        // uncompressed Point
+        else {
+            if b.len() != 65 {
+                return Err(Sm2Error::InvalidPublic);
             }
-        };
+            let x = FieldElement::from_bytes_be(&b[1..33])?;
+            let y = FieldElement::from_bytes_be(&b[33..65])?;
+            Ok(Point {
+                x,
+                y,
+                z: FieldElement::one(),
+            })
+        }
     }
 }
 
@@ -265,7 +251,7 @@ impl Point {
         }
     }
 
-    pub fn is_valid_affine(&self) -> bool {
+    pub fn is_valid_affine_point(&self) -> bool {
         // y^2 = x * (x^2 + a) + b
         let yy = &self.y * &self.y;
         let xx = &self.x * &self.x;
@@ -489,7 +475,7 @@ mod test {
     use num_bigint::BigUint;
     use num_traits::{FromPrimitive, Num, Pow};
 
-    use crate::p256_ecc::{pre_vec_gen, pre_vec_gen2, scalar_mul, Point, P256C_PARAMS};
+    use crate::p256_ecc::{P256C_PARAMS, Point, pre_vec_gen, pre_vec_gen2, scalar_mul};
     use crate::p256_field::FieldElement;
 
     #[test]
@@ -518,19 +504,19 @@ mod test {
             "010000000000000000000000000000000000000000000000000000000000000000",
             16,
         )
-        .unwrap();
+            .unwrap();
 
         let p = BigUint::from_str_radix(
             "FFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00000000FFFFFFFFFFFFFFFF",
             16,
         )
-        .unwrap();
+            .unwrap();
 
         let n = BigUint::from_str_radix(
             "FFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFF7203DF6B21C6052B53BBF40939D54123",
             16,
         )
-        .unwrap();
+            .unwrap();
 
         let r = BigUint::from_u32(2).unwrap().pow(256 as u32);
         let rr = r.pow(2u32);

@@ -1,5 +1,8 @@
 #![doc = include_str!("../README.md")]
 
+use pkcs8::ObjectIdentifier;
+use pkcs8::spki::AlgorithmIdentifier;
+
 pub mod error;
 pub mod exchange;
 pub(crate) mod formulas;
@@ -11,6 +14,7 @@ pub mod p256_ecc;
 pub mod p256_field;
 pub mod p256_pre_table;
 pub mod util;
+pub mod pkcs;
 
 /// Fp 的加法，减法，乘法并不是简单的四则运算。其运算结果的值必须在Fp的有限域中，这样保证椭圆曲线变成离散的点
 ///
@@ -49,29 +53,60 @@ pub trait FeOperation {
     fn right_shift(&self, carry: u32) -> Self;
 }
 
+/// oid to pkcs8
+pub const OID_SM2_PKCS8: ObjectIdentifier = ObjectIdentifier::new_unwrap("1.2.156.10197.1.301");
+pub const ALGORITHM_OID: ObjectIdentifier = ObjectIdentifier::new_unwrap("1.2.840.10045.2.1");
+
+const ALGORITHM_IDENTIFIER: AlgorithmIdentifier<ObjectIdentifier> = AlgorithmIdentifier {
+    oid: ALGORITHM_OID,
+    parameters: Some(OID_SM2_PKCS8),
+};
+
+/// oid refer to GM/T 0006
+pub const OID_SM2_CMS_1: ObjectIdentifier = ObjectIdentifier::new_unwrap("1.2.156.10197.1.301.1");
+pub const OID_SM2_CMS_3: ObjectIdentifier = ObjectIdentifier::new_unwrap("1.2.156.10197.1.301.3");
+
+/// oid refer to GM/T 0010  pkcs#7
+pub const OID_SM2_CMS_DATA: ObjectIdentifier = ObjectIdentifier::new_unwrap("1.2.156.10197.6.1.4.2.1");
+pub const OID_SM2_CMS_SIGNED: ObjectIdentifier = ObjectIdentifier::new_unwrap("1.2.156.10197.6.1.4.2.2");
+pub const OID_SM2_CMS_ENVELOPED: ObjectIdentifier = ObjectIdentifier::new_unwrap("1.2.156.10197.6.1.4.2.3");
+pub const OID_SM2_CMS_SIGNED_AND_ENVELOPED: ObjectIdentifier = ObjectIdentifier::new_unwrap("1.2.156.10197.6.1.4.2.4");
+pub const OID_SM2_CMS_ENCRYPTED: ObjectIdentifier = ObjectIdentifier::new_unwrap("1.2.156.10197.6.1.4.2.5");
+pub const OID_SM2_CMS_KEY_AGREEMENT_INFO: ObjectIdentifier = ObjectIdentifier::new_unwrap("1.2.156.10197.6.1.4.2.6");
+
 #[cfg(test)]
 mod test_sm2 {
     use crate::exchange;
-    use crate::key::{gen_keypair, CompressModle};
-
-    #[test]
-    fn test_gen_keypair() {
-        gen_keypair(CompressModle::Compressed).unwrap();
-    }
+    use crate::key::{gen_keypair, Sm2Model, Sm2PrivateKey, Sm2PublicKey};
 
     #[test]
     fn test_encrypt_decrypt() {
-        let (pk, sk) = gen_keypair(CompressModle::Compressed).unwrap();
+        let (pk, sk) = gen_keypair().unwrap();
         let msg = "你好 world,asjdkajhdjadahkubbhj12893718927391873891,@@！！ world,1231 wo12321321313asdadadahello world，hello world".as_bytes();
-        let encrypt = pk.encrypt(msg).unwrap();
-        let plain = sk.decrypt(&encrypt).unwrap();
+        let encrypt = pk.encrypt(msg, false, Sm2Model::C1C2C3).unwrap();
+        let plain = sk.decrypt(&encrypt, false, Sm2Model::C1C2C3).unwrap();
+        println!("public key {}", pk.to_hex_string(false));
+        println!("private key {}", sk.to_hex_string());
         assert_eq!(msg, plain)
+    }
+
+    #[test]
+    fn test_encrypt_decrypt2() {
+        let public_key = "049173f9d61be088cbffba1185d207da01f7ae573362ad92a75b525e77a8a296e08e1686f1a372437e532478171bcd4c4702502f98f749ff8918e5231a3d8874cf";
+        let private_key = "15432dca3e9056149fb169e80f97201794a7edf35c6976bf35cef28a71d1309f";
+        let pk = Sm2PublicKey::from_hex_string(public_key).unwrap();
+        let sk = Sm2PrivateKey::from_hex_string(private_key).unwrap();
+
+        let msg = "你好 world,asjdkajhdjadahkubbhj12893718927391873891,@@！！ world,1231 wo12321321313asdadadahello world，hello world".as_bytes();
+        let encrypt = pk.encrypt(msg, false, Sm2Model::C1C3C2).unwrap();
+        let plain = sk.decrypt(&encrypt, false, Sm2Model::C1C3C2).unwrap();
+        assert_eq!(msg, plain);
     }
 
     #[test]
     fn test_sign_verify() {
         let msg = b"hello";
-        let (pk, sk) = gen_keypair(CompressModle::Compressed).unwrap();
+        let (pk, sk) = gen_keypair().unwrap();
         let signature = sk.sign(None, msg).unwrap();
         pk.verify(None, msg, &signature).unwrap();
     }

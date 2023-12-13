@@ -1,6 +1,10 @@
 #![doc = include_str!("../README.md")]
 
 use std::fmt::{Display, Formatter};
+use const_oid::ObjectIdentifier;
+
+
+pub const OID_SM3: ObjectIdentifier = ObjectIdentifier::new_unwrap("1.2.156.10197.1.401");
 
 pub enum Sm3Error {
     ErrorMsgLen,

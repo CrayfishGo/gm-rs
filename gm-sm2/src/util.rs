@@ -48,7 +48,7 @@ pub fn compute_za(id: &str, pk: &Sm2PublicKey) -> Sm2Result<[u8; 32]> {
     prepend.extend_from_slice(&P256C_PARAMS.g_point.x.to_bytes_be());
     prepend.extend_from_slice(&P256C_PARAMS.g_point.y.to_bytes_be());
 
-    let pk_affine = pk.value().to_affine();
+    let pk_affine = pk.value().to_affine_point();
     prepend.extend_from_slice(&pk_affine.x.to_bytes_be());
     prepend.extend_from_slice(&pk_affine.y.to_bytes_be());
 
