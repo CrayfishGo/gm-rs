@@ -39,6 +39,25 @@ impl Sm2PublicKey {
         self.point.is_valid()
     }
 
+
+    /// Encrypt the given message and return ASN.1 data
+    pub fn encrypt_asn1(&self, msg: &[u8], compressed: bool, model: Sm2Model) -> Sm2Result<Vec<u8>> {
+        let cipher = self.encrypt(msg, compressed, model).unwrap();
+        let x = BigUint::from_bytes_be(&cipher[0..32]);
+        let y = BigUint::from_bytes_be(&cipher[32..64]);
+        let sm3 = &cipher[64..96];
+        let secret = &cipher[96..];
+        Ok(yasna::construct_der(|writer| {
+            writer.write_sequence(|writer| {
+                writer.next().write_biguint(&x);
+                writer.next().write_biguint(&y);
+                writer.next().write_bytes(&sm3);
+                writer.next().write_bytes(&secret);
+            });
+        }))
+    }
+
+    /// Encrypt the given message.
     pub fn encrypt(&self, msg: &[u8], compressed: bool, model: Sm2Model) -> Sm2Result<Vec<u8>> {
         loop {
             let klen = msg.len();
@@ -164,6 +183,23 @@ pub struct Sm2PrivateKey {
     pub public_key: Sm2PublicKey,
 }
 
+
+impl Eq for Sm2PrivateKey {}
+
+impl PartialEq<Self> for Sm2PrivateKey {
+    #[inline]
+    fn eq(&self, other: &Sm2PrivateKey) -> bool {
+        self.d == other.d
+    }
+}
+
+impl AsRef<Sm2PublicKey> for Sm2PrivateKey {
+    fn as_ref(&self) -> &Sm2PublicKey {
+        &self.public_key
+    }
+}
+
+
 impl Sm2PrivateKey {
     pub fn new(sk: &[u8]) -> Sm2Result<Self> {
         let d = BigUint::from_bytes_be(sk);
@@ -181,6 +217,7 @@ impl Sm2PrivateKey {
         self.d.to_bytes_be()
     }
 
+    /// Sign the given digest.
     pub fn sign(&self, id: Option<&'static str>, msg: &[u8]) -> Sm2Result<Vec<u8>> {
         let id = match id {
             None => DEFAULT_ID,
@@ -223,6 +260,28 @@ impl Sm2PrivateKey {
         }
     }
 
+    /// Decrypt the given ASN.1 message.
+    pub fn decrypt_asn1(&self, ciphertext: &[u8], compressed: bool, model: Sm2Model) -> Sm2Result<Vec<u8>> {
+        let (x, y, sm3, secret) = yasna::parse_der(ciphertext, |reader| {
+            reader.read_sequence(|reader| {
+                let x = reader.next().read_biguint()?;
+                let y = reader.next().read_biguint()?;
+                let sm3 = reader.next().read_bytes()?;
+                let secret = reader.next().read_bytes()?;
+                return Ok((x, y, sm3, secret));
+            })
+        }).unwrap();
+        let x = BigUint::to_bytes_be(&x);
+        let y = BigUint::to_bytes_be(&y);
+        let mut cipher: Vec<u8> = vec![];
+        cipher.extend_from_slice(&x);
+        cipher.extend_from_slice(&y);
+        cipher.extend_from_slice(&sm3);
+        cipher.extend_from_slice(&secret);
+        self.decrypt(&cipher, compressed, model)
+    }
+
+    /// Decrypt the given message.
     pub fn decrypt(&self, ciphertext: &[u8], compressed: bool, model: Sm2Model) -> Sm2Result<Vec<u8>> {
         let c1_end_index = match compressed {
             true => 33,
@@ -307,13 +366,10 @@ impl Sm2PrivateKey {
             Err(e) => { Err(e.to_string()) }
         }
     }
-}
 
-
-#[derive(Debug, Clone, Copy)]
-pub enum CompressModle {
-    Compressed,
-    Uncompressed,
+    pub fn to_public_key(&self) -> Sm2PublicKey {
+        self.public_key.clone()
+    }
 }
 
 /// generate key pair

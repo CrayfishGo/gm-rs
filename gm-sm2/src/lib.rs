@@ -8,7 +8,6 @@ pub mod exchange;
 pub(crate) mod formulas;
 pub mod key;
 mod macros;
-pub mod montgomery;
 pub(crate) mod operation;
 pub mod p256_ecc;
 pub mod p256_field;
@@ -80,7 +79,7 @@ mod test_sm2 {
     use crate::key::{gen_keypair, Sm2Model, Sm2PrivateKey, Sm2PublicKey};
 
     #[test]
-    fn test_encrypt_decrypt() {
+    fn test_encrypt_decrypt_with_gen_key() {
         let (pk, sk) = gen_keypair().unwrap();
         let msg = "你好 world,asjdkajhdjadahkubbhj12893718927391873891,@@！！ world,1231 wo12321321313asdadadahello world，hello world".as_bytes();
         let encrypt = pk.encrypt(msg, false, Sm2Model::C1C2C3).unwrap();
@@ -91,9 +90,22 @@ mod test_sm2 {
     }
 
     #[test]
-    fn test_encrypt_decrypt2() {
+    fn test_encrypt_decrypt_with_special_key() {
         let public_key = "048626c62a8582c639cb3c87b59118713a519988c5f6497f91dd672abbdaaed0420ea7bc2cd03a7c938adc42b450549d312bec823b74cf22cf57c63cebd011c595";
         let private_key = "eb20009ffbffc90aeeb288ca7d782c722332d1d16a206cafec7dd6c64e6fc525";
+        let pk = Sm2PublicKey::from_hex_string(public_key).unwrap();
+        let sk = Sm2PrivateKey::from_hex_string(private_key).unwrap();
+
+        let msg = "你好 world,asjdkajhdjadahkubbhj12893718927391873891,@@！！ world,1231 wo12321321313asdadadahello world，hello world".as_bytes();
+        let encrypt = pk.encrypt(msg, false, Sm2Model::C1C3C2).unwrap();
+        let plain = sk.decrypt(&encrypt, false, Sm2Model::C1C3C2).unwrap();
+        assert_eq!(msg, plain);
+    }
+
+    #[test]
+    fn test_encrypt_decrypt_with_java_bouncycastle_gen_key() {
+        let public_key = "046a6ff781355cc1a9e538213f3a2074ceb32eae9e1caa090e74bbac9024cd58969619ec8dd797635773a9e8c3401135687a49381bb088d4f10c8feed899bf69c5";
+        let private_key = "ff88f12d6f28a852cc59ace674efb842163f1c5294890be9843fe5c20e26a011";
         let pk = Sm2PublicKey::from_hex_string(public_key).unwrap();
         let sk = Sm2PrivateKey::from_hex_string(private_key).unwrap();
 
@@ -112,6 +124,28 @@ mod test_sm2 {
     }
 
     #[test]
+    fn test_sign_verify_with_special_key() {
+        let msg = "hello，你好啊".as_bytes();
+        let public_key = "048626c62a8582c639cb3c87b59118713a519988c5f6497f91dd672abbdaaed0420ea7bc2cd03a7c938adc42b450549d312bec823b74cf22cf57c63cebd011c595";
+        let private_key = "eb20009ffbffc90aeeb288ca7d782c722332d1d16a206cafec7dd6c64e6fc525";
+        let pk = Sm2PublicKey::from_hex_string(public_key).unwrap();
+        let sk = Sm2PrivateKey::from_hex_string(private_key).unwrap();
+        let signature = sk.sign(None, msg).unwrap();
+        pk.verify(None, msg, &signature).unwrap();
+    }
+
+    #[test]
+    fn test_sign_verify_with_java_bouncycastle_gen_key() {
+        let msg = "hello，你好".as_bytes();
+        let public_key = "046a6ff781355cc1a9e538213f3a2074ceb32eae9e1caa090e74bbac9024cd58969619ec8dd797635773a9e8c3401135687a49381bb088d4f10c8feed899bf69c5";
+        let private_key = "ff88f12d6f28a852cc59ace674efb842163f1c5294890be9843fe5c20e26a011";
+        let pk = Sm2PublicKey::from_hex_string(public_key).unwrap();
+        let sk = Sm2PrivateKey::from_hex_string(private_key).unwrap();
+        let signature = sk.sign(None, msg).unwrap();
+        pk.verify(None, msg, &signature).unwrap();
+    }
+
+    #[test]
     fn test_key_exchange() {
         let id_a = "alice123@qq.com";
         let id_b = "bob456@qq.com";
@@ -125,4 +159,19 @@ mod test_sm2 {
         assert_eq!(succ, true);
         assert_eq!(alice.k, bob.k);
     }
+
+
+    #[test]
+    fn test_encrypt_decrypt_asn1_with_special_key() {
+        let public_key = "048626c62a8582c639cb3c87b59118713a519988c5f6497f91dd672abbdaaed0420ea7bc2cd03a7c938adc42b450549d312bec823b74cf22cf57c63cebd011c595";
+        let private_key = "eb20009ffbffc90aeeb288ca7d782c722332d1d16a206cafec7dd6c64e6fc525";
+        let pk = Sm2PublicKey::from_hex_string(public_key).unwrap();
+        let sk = Sm2PrivateKey::from_hex_string(private_key).unwrap();
+
+        let msg = "你好 world,asjdkajhdjadahkubbhj12893718927391873891,@@！！ world,1231 wo12321321313asdadadahello world，hello world".as_bytes();
+        let encrypt = pk.encrypt_asn1(msg, false, Sm2Model::C1C3C2).unwrap();
+        let plain = sk.decrypt_asn1(&encrypt, false, Sm2Model::C1C3C2).unwrap();
+        assert_eq!(msg, plain);
+    }
+
 }

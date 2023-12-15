@@ -1,17 +1,13 @@
-use criterion::{BenchmarkGroup, Criterion, criterion_group, criterion_main};
+use criterion::{Criterion, criterion_group, criterion_main};
 use criterion::measurement::Measurement;
-use num_bigint::{ModInverse, ToBigInt};
 use rand::{Rng, thread_rng};
 
-use gm_sm2::FeOperation;
-use gm_sm2::key::{CompressModle, gen_keypair, Sm2PrivateKey, Sm2PublicKey};
-use gm_sm2::montgomery::{montgomery_mod, montgomery_mul_mod};
-use gm_sm2::p256_ecc::{P256C_PARAMS, Point};
+use gm_sm2::key::{gen_keypair, Sm2PrivateKey, Sm2PublicKey};
 use gm_sm2::p256_field::FieldElement;
 use gm_sm2::p256_pre_table::PRE_TABLE_1;
 
 fn test_gen_keypair() -> (Sm2PublicKey, Sm2PrivateKey) {
-    gen_keypair(CompressModle::Compressed).unwrap()
+    gen_keypair().unwrap()
 }
 
 fn test_sign() -> (Vec<u8>, Sm2PrivateKey) {
@@ -100,58 +96,6 @@ fn bench_mod_mul(c: &mut Criterion) {
         3617546169,
     ]);
     group.bench_function("bench_mod_mul", |x| x.iter(|| a * b));
-    group.finish();
-}
-
-fn bench_mod_mul_mont(c: &mut Criterion) {
-    let mut group = c.benchmark_group("sm2");
-    let a = FieldElement::new([
-        764497930, 2477372445, 473039778, 1327312203, 3110691882, 1307193102, 2665428562, 967816337,
-    ]);
-    let b = FieldElement::new([
-        2873589426, 3315627933, 3055686524, 325110103, 3264434653, 2512214348, 3018997295,
-        3617546169,
-    ]);
-    let aa = a.to_biguint().to_bigint().unwrap();
-    let bb = b.to_biguint().to_bigint().unwrap();
-    let p = P256C_PARAMS.p.to_biguint().to_bigint().unwrap();
-    group.bench_function("bench_mod_mul_mont", |x| {
-        x.iter(|| montgomery_mod(&(&aa * &bb), &p))
-    });
-    group.finish();
-}
-
-fn bench_mod_mul_mont_2(c: &mut Criterion) {
-    let mut group = c.benchmark_group("sm2");
-    let a = FieldElement::new([
-        764497930, 2477372445, 473039778, 1327312203, 3110691882, 1307193102, 2665428562, 967816337,
-    ]);
-    let b = FieldElement::new([
-        2873589426, 3315627933, 3055686524, 325110103, 3264434653, 2512214348, 3018997295,
-        3617546169,
-    ]);
-    let aa = a.to_biguint().to_bigint().unwrap();
-    let bb = b.to_biguint().to_bigint().unwrap();
-    let p = P256C_PARAMS.p.to_biguint().to_bigint().unwrap();
-    group.bench_function("bench_mod_mul_mont_2", |x| {
-        x.iter(|| montgomery_mul_mod(&aa, &bb, &p))
-    });
-    group.finish();
-}
-
-fn bench_mod_mul_bigint_2(c: &mut Criterion) {
-    let mut group = c.benchmark_group("sm2");
-    let a = FieldElement::new([
-        764497930, 2477372445, 473039778, 1327312203, 3110691882, 1307193102, 2665428562, 967816337,
-    ]);
-    let b = FieldElement::new([
-        2873589426, 3315627933, 3055686524, 325110103, 3264434653, 2512214348, 3018997295,
-        3617546169,
-    ]);
-    let aa = a.to_biguint().to_bigint().unwrap();
-    let bb = b.to_biguint().to_bigint().unwrap();
-    let p = P256C_PARAMS.p.to_biguint().to_bigint().unwrap();
-    group.bench_function("bench_mod_mul_bigint", |x| x.iter(|| (&aa * &bb) % &p));
     group.finish();
 }
 

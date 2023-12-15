@@ -3,19 +3,55 @@ use std::io::Cursor;
 use std::ops::{Mul, Sub};
 
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-use num_bigint::BigUint;
+use num_bigint::{BigInt, BigUint, Sign};
 use num_traits::Num;
 
+use crate::{FeOperation, forward_ref_ref_binop, forward_ref_val_binop, forward_val_val_binop};
 use crate::error::{Sm2Error, Sm2Result};
 use crate::p256_ecc::P256C_PARAMS;
-use crate::{forward_ref_ref_binop, forward_ref_val_binop, forward_val_val_binop, FeOperation};
 
 pub type Fe = [u32; 8];
 
-pub trait Conversion {
-    fn fe_to_bigunit(&self) -> BigUint;
+pub trait Fe2BigUnit {
+    fn to_biguint(&self) -> BigUint;
+    fn to_bigint(&self, sign: Sign) -> BigInt;
+}
 
-    fn bigunit_fe(&self) -> Fe;
+pub trait BigUnit2Fe {
+    fn to_fe(&self) -> Fe;
+}
+
+impl Fe2BigUnit for Fe {
+    fn to_biguint(&self) -> BigUint {
+        let mut ret: Vec<u8> = Vec::new();
+        for i in 0..8 {
+            ret.write_u32::<BigEndian>(self[i]).unwrap();
+        }
+        BigUint::from_bytes_be(&ret[..])
+    }
+
+    fn to_bigint(&self, sign: Sign) -> BigInt {
+        let mut ret: Vec<u8> = Vec::new();
+        for i in 0..8 {
+            ret.write_u32::<BigEndian>(self[i]).unwrap();
+        }
+        BigInt::from_bytes_be(sign, &ret[..])
+    }
+}
+
+impl BigUnit2Fe for BigUint {
+    fn to_fe(&self) -> Fe {
+        let v = self.to_bytes_be();
+        let mut num_v = [0u8; 32];
+        num_v[32 - v.len()..32].copy_from_slice(&v[..]);
+        let mut elem = [0u32; 8];
+        let mut c = Cursor::new(num_v);
+        for i in 0..8 {
+            let x = c.read_u32::<BigEndian>().unwrap();
+            elem[i] = x;
+        }
+        elem
+    }
 }
 
 // p = FFFFFFFE FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF 00000000 FFFFFFFF FFFFFFFF
@@ -111,7 +147,7 @@ impl FieldElement {
             "28948022302589062189105086303505223191562588497981047863605298483322421248000",
             10,
         )
-        .unwrap();
+            .unwrap();
         let y = self.modpow(&u);
         let z = &y.square();
         if z == self {

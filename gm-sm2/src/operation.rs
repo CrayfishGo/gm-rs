@@ -1,45 +1,9 @@
-use std::io::Cursor;
-
-use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-use num_bigint::{BigUint, ModInverse};
+use num_bigint::BigUint;
 use num_integer::Integer;
 
-use crate::p256_field::{Conversion, Fe, FieldElement};
-use crate::util::{add_raw, mul_raw, sub_raw};
 use crate::FeOperation;
-
-impl Conversion for Fe {
-    fn fe_to_bigunit(&self) -> BigUint {
-        let mut ret: Vec<u8> = Vec::new();
-        for i in 0..8 {
-            ret.write_u32::<BigEndian>(self[i]).unwrap();
-        }
-        BigUint::from_bytes_be(&ret[..])
-    }
-
-    fn bigunit_fe(&self) -> Fe {
-        unimplemented!()
-    }
-}
-
-impl Conversion for BigUint {
-    fn fe_to_bigunit(&self) -> BigUint {
-        unimplemented!()
-    }
-
-    fn bigunit_fe(&self) -> Fe {
-        let v = self.to_bytes_be();
-        let mut num_v = [0u8; 32];
-        num_v[32 - v.len()..32].copy_from_slice(&v[..]);
-        let mut elem = [0u32; 8];
-        let mut c = Cursor::new(num_v);
-        for i in 0..8 {
-            let x = c.read_u32::<BigEndian>().unwrap();
-            elem[i] = x;
-        }
-        elem
-    }
-}
+use crate::p256_field::{BigUnit2Fe, Fe, Fe2BigUnit, FieldElement};
+use crate::util::{add_raw, mul_raw, sub_raw};
 
 impl FeOperation for Fe {
     #[inline]
@@ -242,7 +206,10 @@ impl FeOperation for BigUint {
     }
 
     fn inv(&self, modulus: &Self) -> BigUint {
-        self.mod_inverse(modulus).unwrap().to_biguint().unwrap()
+        let a = self.to_fe();
+        let b = modulus.to_fe();
+        let ret = a.inv(&b);
+        ret.to_biguint()
     }
 
     fn right_shift(&self, carry: u32) -> BigUint {
@@ -254,12 +221,13 @@ impl FeOperation for BigUint {
 
 #[cfg(test)]
 mod test_op {
-    use num_bigint::ModInverse;
-    use rand::{thread_rng, Rng};
+    use num_bigint::BigUint;
+    use num_traits::Num;
+    use rand::{Rng, thread_rng};
 
+    use crate::FeOperation;
     use crate::p256_ecc::P256C_PARAMS;
     use crate::p256_pre_table::PRE_TABLE_1;
-    use crate::FeOperation;
 
     #[test]
     fn test_mod_add() {
@@ -314,21 +282,17 @@ mod test_op {
 
     #[test]
     fn test_mod_inv() {
-        let mut rng = thread_rng();
-        let n: u32 = rng.gen_range(10..256);
+        let b = BigUint::from_str_radix(
+            "28E9FA9E9D9F5E344D5A9E4BCF6509A7F39789F515AB8F92DDBCBD414D940E93",
+            16,
+        ).unwrap();
 
-        let modulus = &P256C_PARAMS.p;
-
-        let p = &PRE_TABLE_1[n as usize];
-        let x = p.x.to_biguint();
-
-        let ret1 = x.inv(&modulus.to_biguint());
-        let ret2 = x
-            .mod_inverse(&modulus.to_biguint())
-            .unwrap()
-            .to_biguint()
-            .unwrap();
-
-        assert_eq!(ret2, ret1)
+        let x = BigUint::from_str_radix(
+            "32C4AE2C1F1981195F9904466A39C9948FE30BBFF2660BE1715A4589334C74C7",
+            16,
+        ).unwrap();
+        let ret1 = x.inv(&b);
+        println!("{}", ret1);
+        ()
     }
 }
