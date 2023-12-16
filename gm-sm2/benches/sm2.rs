@@ -104,7 +104,7 @@ fn bench_mod_inv(c: &mut Criterion) {
     let a = FieldElement::new([
         764497930, 2477372445, 473039778, 1327312203, 3110691882, 1307193102, 2665428562, 967816337,
     ]);
-    group.bench_function("bench_mod_inv", |x| x.iter(|| a.modinv()));
+    group.bench_function("bench_mod_inv", |x| x.iter(|| a.mod_inv()));
     group.finish();
 }
 

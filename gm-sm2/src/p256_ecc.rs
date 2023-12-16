@@ -66,10 +66,11 @@ impl CurveParameters {
             0xffff_ffff,
             0xffff_ffff,
         ]);
-        let n = BigUint::from_slice(&[
-            0xfffffffe, 0xffffffff, 0xffffffff, 0xffffffff, 0x7203df6b, 0x21c6052b, 0x53bbf409,
-            0x39d54123,
-        ]);
+        let n = BigUint::from_str_radix(
+            "FFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFF7203DF6B21C6052B53BBF40939D54123",
+            16,
+        )
+        .unwrap();
         let a = FieldElement::new([
             0xffff_fffe,
             0xffff_ffff,
@@ -136,7 +137,7 @@ pub struct Point {
 
 impl Point {
     pub fn to_affine_point(&self) -> Point {
-        let z_inv = &self.z.modinv();
+        let z_inv = &self.z.mod_inv();
         let z_inv2 = z_inv * z_inv;
         let z_inv3 = z_inv2 * z_inv;
         let x = &self.x * z_inv2;

@@ -1,7 +1,6 @@
 use std::{cmp::Ordering, ops::Mul};
 use std::borrow::ToOwned;
 
-use num_bigint::BigUint;
 use num_traits::Num;
 
 use crate::p256_field::{BigUnit2Fe, Fe};
@@ -36,19 +35,15 @@ pub const P_INV_R_NEG: Fe = [
     0x00000001, 0x00000000, 0x00000001, 0xffffffff, 0x00000000, 0xfffffffe, 0x00000001, 0xfffffffc,
 ];
 
-const MODULO: MontyBigNum = MontyBigNum::from_u32_slice_const(&P);
-
-pub fn big_uint_mulmod(a: &BigUint, b: &BigUint, m: &BigUint) -> BigUint {
-    a * b % m
-}
+const MODULO: ExtBigNum = ExtBigNum::from_u32_slice_const(&P);
 
 #[derive(Eq, PartialEq, Ord, Copy, Clone, Debug)]
-pub struct MontyBigNum {
+pub struct ExtBigNum {
     num: Fe,
 }
 
-impl PartialOrd for MontyBigNum {
-    fn partial_cmp(&self, other: &MontyBigNum) -> Option<Ordering> {
+impl PartialOrd for ExtBigNum {
+    fn partial_cmp(&self, other: &ExtBigNum) -> Option<Ordering> {
         for i in (0..8).rev() {
             if self.num[i] > other.num[i] {
                 return Some(Ordering::Greater);
@@ -60,7 +55,7 @@ impl PartialOrd for MontyBigNum {
     }
 }
 
-impl MontyBigNum {
+impl ExtBigNum {
     pub const fn zero() -> Self {
         Self { num: [0; 8] }
     }
@@ -82,15 +77,15 @@ impl MontyBigNum {
     }
 
     pub fn to_monty(&mut self) {
-        *self = *self * MontyBigNum::from_u32_slice(&RR_P);
+        *self = *self * ExtBigNum::from_u32_slice(&RR_P);
     }
 
     pub fn from_monty(&mut self) {
-        *self = *self * MontyBigNum::one();
+        *self = *self * ExtBigNum::one();
     }
 }
 
-fn bignum_sub(lhs: &mut MontyBigNum, rhs: &MontyBigNum) -> u32 {
+fn bignum_sub(lhs: &mut ExtBigNum, rhs: &ExtBigNum) -> u32 {
     let mut borrow: u32 = 0;
     for i in 0..8 {
         let mut temp: u64 = lhs.num[i] as u64;
@@ -107,7 +102,7 @@ fn bignum_sub(lhs: &mut MontyBigNum, rhs: &MontyBigNum) -> u32 {
     borrow
 }
 
-impl Mul for MontyBigNum {
+impl Mul for ExtBigNum {
     type Output = Self;
 
     fn mul(self, other: Self) -> Self {
@@ -154,7 +149,7 @@ impl Mul for MontyBigNum {
             // t[s] := t[s+1] + C
             res[8] = res[8 + 1] + (cs >> 32) as u32;
         }
-        let res_scalar = MontyBigNum::from_u32_slice(&res[0..8]);
+        let res_scalar = ExtBigNum::from_u32_slice(&res[0..8]);
         let mut res_scalar_sub = res_scalar;
         let borrow = bignum_sub(&mut res_scalar_sub, &MODULO);
         if res[8] != 0 || borrow == 0 {
@@ -170,7 +165,7 @@ mod test_mont {
     use num_bigint::BigUint;
 
     use crate::FeOperation;
-    use crate::mont256::{big_uint_mulmod, MODULO, MontyBigNum, P, RR_P};
+    use crate::mont256::{ExtBigNum, MODULO, P, RR_P};
 
     #[test]
     fn test_mont_mul() {
@@ -217,13 +212,7 @@ mod test_mont {
         ]);
 
         let n = BigUint::from_slice(&[
-            0x39d54123,
-            0x53bbf409,
-            0x21c6052b,
-            0x7203df6b,
-            0xffffffff,
-            0xffffffff,
-            0xffffffff,
+            0x39d54123, 0x53bbf409, 0x21c6052b, 0x7203df6b, 0xffffffff, 0xffffffff, 0xffffffff,
             0xfffffffe,
         ]);
 
@@ -232,8 +221,8 @@ mod test_mont {
         println!("mod sum = {:?}", ((&a + &b) % &m).to_u32_digits());
         println!(
             "mod sum2= {:?}",
-            MontyBigNum::from_u32_slice(&a.to_u32_digits()).num.mod_add(
-                &MontyBigNum::from_u32_slice(&b.to_u32_digits()).num,
+            ExtBigNum::from_u32_slice(&a.to_u32_digits()).num.mod_add(
+                &ExtBigNum::from_u32_slice(&b.to_u32_digits()).num,
                 &MODULO.num
             )
         );
@@ -241,18 +230,18 @@ mod test_mont {
         println!("mod sub = {:?}", ((&a - &b) % &m).to_u32_digits());
         println!(
             "mod sub2= {:?}",
-            MontyBigNum::from_u32_slice(&a.to_u32_digits()).num.mod_sub(
-                &MontyBigNum::from_u32_slice(&b.to_u32_digits()).num,
+            ExtBigNum::from_u32_slice(&a.to_u32_digits()).num.mod_sub(
+                &ExtBigNum::from_u32_slice(&b.to_u32_digits()).num,
                 &MODULO.num
             )
         );
         println!("========================");
 
-        let r2_mod = MontyBigNum::from_u32_slice(&RR_P);
-        let one = MontyBigNum::one();
+        let r2_mod = ExtBigNum::from_u32_slice(&RR_P);
+        let one = ExtBigNum::one();
         // 进蒙哥马利域
-        let a_monty = MontyBigNum::from_u32_slice(&a.to_u32_digits()) * r2_mod;
-        let b_monty = MontyBigNum::from_u32_slice(&b.to_u32_digits()) * r2_mod;
+        let a_monty = ExtBigNum::from_u32_slice(&a.to_u32_digits()) * r2_mod;
+        let b_monty = ExtBigNum::from_u32_slice(&b.to_u32_digits()) * r2_mod;
         // 蒙哥马利模乘
         let res = a_monty * b_monty;
         // 出蒙哥马利域
@@ -262,7 +251,7 @@ mod test_mont {
         println!("ret = {:?}", res.num);
         println!("==========蒙哥马利模乘结果===========");
 
-        let res = big_uint_mulmod(&a, &b, &m);
+        let res = a * b % m;
         println!("==========普通模乘结果===========");
         println!("ret = {}", &res);
         println!("ret = {:?}", res.to_u32_digits());

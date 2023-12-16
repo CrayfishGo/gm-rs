@@ -6,9 +6,9 @@ use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use num_bigint::{BigInt, BigUint, Sign};
 use num_traits::Num;
 
-use crate::{FeOperation, forward_ref_ref_binop, forward_ref_val_binop, forward_val_val_binop};
 use crate::error::{Sm2Error, Sm2Result};
 use crate::p256_ecc::P256C_PARAMS;
+use crate::{forward_ref_ref_binop, forward_ref_val_binop, forward_val_val_binop, FeOperation};
 
 pub type Fe = [u32; 8];
 
@@ -79,16 +79,8 @@ impl FieldElement {
     #[inline]
     pub fn from_slice(x: &[u32]) -> FieldElement {
         let mut arr: Fe = [0; 8];
-        arr.copy_from_slice(&x[..]);
+        arr.copy_from_slice(x);
         FieldElement::new(arr)
-    }
-
-    #[inline]
-    pub fn from_number(x: u64) -> FieldElement {
-        let mut arr: Fe = [0; 8];
-        arr[7] = (x & 0xffff_ffff) as u32;
-        arr[6] = (x >> 32) as u32;
-        FieldElement { inner: arr }
     }
 
     #[inline]
@@ -134,7 +126,7 @@ impl FieldElement {
             "28948022302589062189105086303505223191562588497981047863605298483322421248000",
             10,
         )
-            .unwrap();
+        .unwrap();
         let y = self.modpow(&u);
         let z = &y.square();
         if z == self {
@@ -154,7 +146,9 @@ impl FieldElement {
     }
 
     pub fn one() -> FieldElement {
-        FieldElement::from_number(1)
+        let mut arr: Fe = [0; 8];
+        arr[7] = 1;
+        FieldElement { inner: arr }
     }
 
     pub fn is_even(&self) -> bool {
@@ -182,7 +176,7 @@ impl FieldElement {
     #[inline]
     pub fn modpow(&self, exponent: &BigUint) -> Self {
         let u = FieldElement::from_biguint(exponent).unwrap();
-        let mut q0 = FieldElement::from_number(1);
+        let mut q0 = FieldElement::one();
         let mut q1 = *self;
         let mut i = 0;
         while i < 256 {
@@ -204,7 +198,7 @@ impl FieldElement {
 
     // calculate x^(-1) mod p
     #[inline]
-    pub fn modinv(&self) -> FieldElement {
+    pub fn mod_inv(&self) -> FieldElement {
         let ecc_p = &P256C_PARAMS.p;
         let ret = self.inner.inv(&ecc_p.inner);
         FieldElement::new(ret)

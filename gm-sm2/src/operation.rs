@@ -39,7 +39,7 @@ impl FeOperation for Fe {
     fn inv(&self, modulus: &Self) -> Self {
         let mut ru = *self;
         let mut rv = *modulus;
-        let mut ra = FieldElement::from_number(1).inner;
+        let mut ra = FieldElement::one().inner;
         let mut rc = [0; 8];
         while ru != [0; 8] {
             if ru[7] & 0x01 == 0 {
