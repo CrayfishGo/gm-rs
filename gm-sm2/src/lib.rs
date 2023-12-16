@@ -14,6 +14,7 @@ pub mod p256_field;
 pub mod p256_pre_table;
 pub mod util;
 pub mod pkcs;
+mod mont256;
 
 /// Fp 的加法，减法，乘法并不是简单的四则运算。其运算结果的值必须在Fp的有限域中，这样保证椭圆曲线变成离散的点
 ///
