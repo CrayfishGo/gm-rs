@@ -1,10 +1,10 @@
 use lazy_static::lazy_static;
-use num_bigint::{BigInt, BigUint};
+use num_bigint::BigUint;
 use num_traits::{Num, One};
 
 use crate::error::{Sm2Error, Sm2Result};
 use crate::formulas::{add_1998_cmo, double_1998_cmo};
-use crate::p256_field::{ECC_P, FieldElement};
+use crate::p256_field::FieldElement;
 use crate::p256_pre_table::{PRE_TABLE_1, PRE_TABLE_2};
 
 lazy_static! {
@@ -15,6 +15,8 @@ lazy_static! {
 #[derive(Debug, Clone)]
 pub struct CurveParameters {
     /// p：大于3的素数
+    ///
+    /// p = 2^256 − 2^224 − 2^96 + 2^32 − 1
     pub p: FieldElement,
 
     /// n：基点G的阶(n是#E(Fq)的素因子)
@@ -32,20 +34,6 @@ pub struct CurveParameters {
 
     /// G：椭圆曲线的一个基点，其阶为素数
     pub g_point: Point,
-
-    pub p_inv_r_neg: BigUint,
-    pub n_inv_r_neg: BigUint,
-
-    pub r: BigUint,
-    pub rr: BigUint,
-
-    // 蒙哥马利域转化用参数，(r ^ 2)(mod n)
-    pub rr_n: BigUint,
-
-    // 蒙哥马利域转化用参数，(r ^ 2)(mod p)
-    pub rr_p: BigUint,
-
-    pub q: BigInt,
 }
 
 impl Default for CurveParameters {
@@ -68,13 +56,20 @@ impl CurveParameters {
     }
 
     pub fn new_default() -> CurveParameters {
-        let p = FieldElement::new(ECC_P);
-        let n = BigUint::from_str_radix(
-            "FFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFF7203DF6B21C6052B53BBF40939D54123",
-            16,
-        )
-            .unwrap();
-        // a = p - 3
+        let p = FieldElement::new([
+            0xffff_fffe,
+            0xffff_ffff,
+            0xffff_ffff,
+            0xffff_ffff,
+            0xffff_ffff,
+            0x0000_0000,
+            0xffff_ffff,
+            0xffff_ffff,
+        ]);
+        let n = BigUint::from_slice(&[
+            0xfffffffe, 0xffffffff, 0xffffffff, 0xffffffff, 0x7203df6b, 0x21c6052b, 0x53bbf409,
+            0x39d54123,
+        ]);
         let a = FieldElement::new([
             0xffff_fffe,
             0xffff_ffff,
@@ -116,12 +111,6 @@ impl CurveParameters {
             0x02df_32e5,
             0x2139_f0a0,
         ]);
-
-        let r = BigUint::from_str_radix(
-            "010000000000000000000000000000000000000000000000000000000000000000",
-            16,
-        )
-            .unwrap();
         let ctx = CurveParameters {
             p,
             n,
@@ -133,33 +122,6 @@ impl CurveParameters {
                 y: g_y,
                 z: FieldElement::one(),
             },
-            rr: &r * &r,
-            rr_p: BigUint::from_str_radix(
-                "400000002000000010000000100000002ffffffff0000000200000003",
-                16,
-            )
-                .unwrap(),
-            rr_n: BigUint::from_str_radix(
-                "1EB5E412A22B3D3B620FC84C3AFFE0D43464504ADE6FA2FA901192AF7C114F20",
-                16,
-            )
-                .unwrap(),
-            r,
-            q: BigInt::from_str_radix(
-                "-3fffffffe00000001ffffffff00000000fffffffeffffffffffffffff",
-                16,
-            )
-                .unwrap(),
-            p_inv_r_neg: BigUint::from_str_radix(
-                "fffffffc00000001fffffffe00000000ffffffff000000010000000000000001",
-                16,
-            )
-                .unwrap(),
-            n_inv_r_neg: BigUint::from_str_radix(
-                "6f39132f82e4c7bc2b0068d3b08941d4df1e8d34fc8319a5327f9e8872350975",
-                16,
-            )
-                .unwrap(),
         };
         ctx
     }
@@ -497,7 +459,7 @@ fn pre_vec_gen2(n: u32) -> [u32; 8] {
 
 #[cfg(test)]
 mod test {
-    use crate::p256_ecc::{P256C_PARAMS, Point, pre_vec_gen, pre_vec_gen2, scalar_mul};
+    use crate::p256_ecc::{pre_vec_gen, pre_vec_gen2, scalar_mul, Point, P256C_PARAMS};
     use crate::p256_field::FieldElement;
 
     #[test]

@@ -54,19 +54,6 @@ impl BigUnit2Fe for BigUint {
     }
 }
 
-// p = FFFFFFFE FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF 00000000 FFFFFFFF FFFFFFFF
-// p = 2^256 − 2^224 − 2^96 + 2^32 − 1
-pub const ECC_P: Fe = [
-    0xffff_fffe,
-    0xffff_ffff,
-    0xffff_ffff,
-    0xffff_ffff,
-    0xffff_ffff,
-    0x0000_0000,
-    0xffff_ffff,
-    0xffff_ffff,
-];
-
 /// 素域Fp的域元素
 ///
 /// 这里我们规定一个有限域Fp
@@ -231,7 +218,7 @@ impl<'a> Add<&'a FieldElement> for FieldElement {
     type Output = FieldElement;
 
     fn add(mut self, rhs: &FieldElement) -> Self::Output {
-        self.inner = self.inner.mod_add(&rhs.inner, &ECC_P);
+        self.inner = self.inner.mod_add(&rhs.inner, &P256C_PARAMS.p.inner);
         self
     }
 }
@@ -243,7 +230,7 @@ impl<'a> Sub<&'a FieldElement> for FieldElement {
     type Output = FieldElement;
 
     fn sub(mut self, rhs: &'a FieldElement) -> Self::Output {
-        self.inner = self.inner.mod_sub(&rhs.inner, &ECC_P);
+        self.inner = self.inner.mod_sub(&rhs.inner, &P256C_PARAMS.p.inner);
         self
     }
 }
@@ -255,7 +242,7 @@ impl<'a> Mul<&'a FieldElement> for FieldElement {
     type Output = FieldElement;
 
     fn mul(mut self, rhs: &'a FieldElement) -> Self::Output {
-        self.inner = self.inner.mod_mul(&rhs.inner, &ECC_P);
+        self.inner = self.inner.mod_mul(&rhs.inner, &P256C_PARAMS.p.inner);
         self
     }
 }
