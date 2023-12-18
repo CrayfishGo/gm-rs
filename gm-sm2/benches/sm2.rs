@@ -1,5 +1,4 @@
 use criterion::{Criterion, criterion_group, criterion_main};
-use criterion::measurement::Measurement;
 use rand::{Rng, thread_rng};
 
 use gm_sm2::key::{gen_keypair, Sm2PrivateKey, Sm2PublicKey};

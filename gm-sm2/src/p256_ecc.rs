@@ -70,7 +70,7 @@ impl CurveParameters {
             "FFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFF7203DF6B21C6052B53BBF40939D54123",
             16,
         )
-        .unwrap();
+            .unwrap();
         let a = FieldElement::new([
             0xffff_fffe,
             0xffff_ffff,
@@ -333,31 +333,6 @@ pub fn scalar_mul(m: &BigUint, p: &Point) -> Point {
     mul_naf(m, p)
 }
 
-// Montgomery ladder based scalar multiplication (MLSM)
-// Input: integer k and point P, m = bit length of k
-// 1: Initial: Q1 = Q0 = 0, QT = P, i = 0
-// 2: While i < m, do:
-// 3: Q1 = Q0 + QT , Q2 = 2QT
-// 4: If(ki = 1) Switch(Q0, Q1)
-// 5: QT = Q2, i = i + 1
-// 6: end While
-// TODO fixme: The mlsm_mul cause signature verify failed
-pub fn mlsm_mul(k: &BigUint, p: &Point) -> Point {
-    let bi = k.to_bytes_be();
-    let mut q0 = Point::zero();
-    let mut qt = p.clone();
-    let mut i = 0;
-    while i < bi.len() {
-        let q1 = q0.add(&qt);
-        let q2 = qt.double();
-        if bi[i] & 0x1 == 1 {
-            q0 = q1;
-        }
-        qt = q2;
-        i += 1;
-    }
-    q0
-}
 
 fn mul_naf(k: &BigUint, p: &Point) -> Point {
     // 预处理计算
@@ -396,7 +371,7 @@ fn mul_naf(k: &BigUint, p: &Point) -> Point {
 /// w: 窗口宽度
 ///
 /// NAF（Non-Adjacent Form)）： 非相邻形式的标量点乘算法
-// #[inline(always)]
+#[inline(always)]
 fn w_naf(k: &[u32], w: usize, lst: &mut usize) -> [i8; 257] {
     let mut carry = 0;
     let mut bit = 0;
@@ -460,7 +435,7 @@ fn pre_vec_gen2(n: u32) -> [u32; 8] {
 
 #[cfg(test)]
 mod test {
-    use crate::p256_ecc::{pre_vec_gen, pre_vec_gen2, scalar_mul, Point, P256C_PARAMS};
+    use crate::p256_ecc::{P256C_PARAMS, Point, pre_vec_gen, pre_vec_gen2, scalar_mul};
     use crate::p256_field::FieldElement;
 
     #[test]
