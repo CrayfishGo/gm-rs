@@ -46,14 +46,8 @@ impl Exchange {
         rhs_id: Option<&str>,
         rhs_pk: &Sm2PublicKey,
     ) -> Sm2Result<Exchange> {
-        let id = match id {
-            None => DEFAULT_ID,
-            Some(s) => s,
-        };
-        let rhs_id = match rhs_id {
-            None => DEFAULT_ID,
-            Some(s) => s,
-        };
+        let id = id.unwrap_or_else(|| DEFAULT_ID);
+        let rhs_id = rhs_id.unwrap_or_else(|| DEFAULT_ID);
         Ok(Exchange {
             klen,
             za: compute_za(id, &pk)?,

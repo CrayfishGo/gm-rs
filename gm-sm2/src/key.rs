@@ -112,10 +112,7 @@ impl Sm2PublicKey {
     }
 
     pub fn verify(&self, id: Option<&'static str>, msg: &[u8], sig: &[u8]) -> Sm2Result<()> {
-        let id = match id {
-            None => DEFAULT_ID,
-            Some(u_id) => u_id,
-        };
+        let id = id.unwrap_or_else(|| DEFAULT_ID);
         let mut digest = compute_za(id, self)?;
         digest = sm3_hash(&[digest.to_vec(), msg.to_vec()].concat());
         self.verify_raw(&digest[..], self, sig)
@@ -219,10 +216,7 @@ impl Sm2PrivateKey {
 
     /// Sign the given digest.
     pub fn sign(&self, id: Option<&'static str>, msg: &[u8]) -> Sm2Result<Vec<u8>> {
-        let id = match id {
-            None => DEFAULT_ID,
-            Some(u_id) => u_id,
-        };
+        let id = id.unwrap_or_else(|| DEFAULT_ID);
         let mut digest = compute_za(id, &self.public_key)?;
         digest = sm3_hash(&[digest.to_vec(), msg.to_vec()].concat());
         self.sign_raw(&digest[..], &self.d)
