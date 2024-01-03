@@ -84,19 +84,6 @@ pub fn kdf(z: &[u8], klen: usize) -> Vec<u8> {
 }
 
 #[inline(always)]
-pub const fn adc_u64(a: u64, b: u64, carry: u64) -> (u64, u64) {
-    let ret = (a as u128) + (b as u128) + (carry as u128);
-    ((ret & 0xffff_ffff_ffff_ffff) as u64, (ret >> 64) as u64)
-}
-
-#[inline(always)]
-pub const fn add_u32(a: u32, b: u32, carry: u32) -> (u32, bool) {
-    let (m, c1) = a.overflowing_add(b);
-    let (r, c2) = m.overflowing_add(carry as u32);
-    (r & 0xffff_ffff, c1 || c2)
-}
-
-#[inline(always)]
 pub const fn fe32_to_fe64(fe32: &[u32; 8]) -> [u64; 4] {
     [
         (fe32[0] as u64) | ((fe32[1] as u64) << 32),
@@ -127,7 +114,11 @@ pub const fn add_raw(a: &[u32; 8], b: &[u32; 8]) -> ([u32; 8], bool) {
     let mut carry = false;
     let mut i = 7;
     loop {
-        let (t_sum, c) = add_u32(a[i], b[i], carry as u32);
+        let (t_sum, c) = {
+            let (m, c1) = a[i].overflowing_add(b[i]);
+            let (r, c2) = m.overflowing_add(carry as u32);
+            (r & 0xffff_ffff, c1 || c2)
+        };
         sum[i] = t_sum;
         carry = c;
         if i == 0 {
@@ -138,34 +129,68 @@ pub const fn add_raw(a: &[u32; 8], b: &[u32; 8]) -> ([u32; 8], bool) {
     (sum, carry)
 }
 
+pub const fn add_raw2(a: &[u32; 8], b: &[u32; 8]) -> ([u32; 8], bool) {
+    let mut sum = [0; 8];
+    let mut carry = false;
+    let mut i = 0;
+    loop {
+        let (t_sum, c) = {
+            let (m, c1) = a[i].overflowing_add(b[i]);
+            let (r, c2) = m.overflowing_add(carry as u32);
+            (r & 0xffff_ffff, c1 || c2)
+        };
+        sum[i] = t_sum;
+        carry = c;
+        if i == 7 {
+            break;
+        }
+        i += 1;
+    }
+    (sum, carry)
+}
+
 #[inline(always)]
 pub const fn sub_raw(a: &[u32; 8], b: &[u32; 8]) -> ([u32; 8], bool) {
     let mut r = [0; 8];
     let mut borrow = false;
     let mut j = 0;
-    while j < 8 {
+    loop {
         let i = 7 - j;
-        let (diff, bor) = sub_u32(a[i], b[i], borrow);
+        let (diff, bor) = {
+            let (a, b1) = a[i].overflowing_sub(borrow as u32);
+            let (res, b2) = a.overflowing_sub(b[i]);
+            (res, b1 || b2)
+        };
         r[i] = diff;
         borrow = bor;
+        if j == 7 {
+            break;
+        }
         j += 1;
     }
     (r, borrow)
 }
 
 #[inline(always)]
-pub const fn sub_u32(a: u32, b: u32, borrow: bool) -> (u32, bool) {
-    let (a, b1) = a.overflowing_sub(borrow as u32);
-    let (res, b2) = a.overflowing_sub(b);
-    (res, b1 || b2)
-}
-
-#[inline(always)]
-pub const fn mul_u32(a: u32, b: u32) -> (u64, u64) {
-    let uv = (a as u64) * (b as u64);
-    let u = uv >> 32;
-    let v = uv & 0xffff_ffff;
-    (u, v)
+pub const fn sub_raw2(a: &[u32; 8], b: &[u32; 8]) -> ([u32; 8], bool) {
+    let mut r = [0; 8];
+    let mut borrow = false;
+    let mut j = 7;
+    loop {
+        let i = 7 - j;
+        let (diff, bor) = {
+            let (a, b1) = a[i].overflowing_sub(borrow as u32);
+            let (res, b2) = a.overflowing_sub(b[i]);
+            (res, b1 || b2)
+        };
+        r[i] = diff;
+        borrow = bor;
+        if j == 0 {
+            break;
+        }
+        j -= 1;
+    }
+    (r, borrow)
 }
 
 #[inline(always)]
@@ -183,7 +208,12 @@ pub const fn mul_raw(a: &[u32; 8], b: &[u32; 8]) -> [u32; 16] {
             }
             let b_idx = ret_idx - a_idx;
             if b_idx < 8 {
-                let (hi, lo) = mul_u32(a[7 - a_idx], b[7 - b_idx]);
+                let (hi, lo) = {
+                    let uv = (a[7 - a_idx] as u64) * (b[7 - b_idx] as u64);
+                    let u = uv >> 32;
+                    let v = uv & 0xffff_ffff;
+                    (u, v)
+                };
                 local += lo;
                 carry += hi;
             }
@@ -200,3 +230,152 @@ pub const fn mul_raw(a: &[u32; 8], b: &[u32; 8]) -> [u32; 16] {
     ret
 }
 
+
+#[cfg(test)]
+mod test_op {
+    use crate::util::{add_raw, add_raw2, mul_raw, sub_raw, sub_raw2};
+
+    #[test]
+    fn test_bn_add() {
+        let a: [u32; 8] = [
+            0xffff_fffe,
+            0xffff_ffff,
+            0xffff_ffff,
+            0xffff_ffff,
+            0xffff_ffff,
+            0x0000_0000,
+            0xffff_ffff,
+            0xffff_fffc,
+        ];
+
+        let b: [u32; 8] = [
+            0x28e9_fa9e,
+            0x9d9f_5e34,
+            0x4d5a_9e4b,
+            0xcf65_09a7,
+            0xf397_89f5,
+            0x15ab_8f92,
+            0xddbc_bd41,
+            0x4d94_0e93,
+        ];
+
+        let (r, c) = add_raw(&a, &b);
+        println!("{:?}", r); // [686422685, 2644467252, 1297784395, 3479505319, 4086794740, 363564947, 3720133953, 1301548687]
+
+        let a: [u32; 8] = [
+            0xffff_fffc,
+            0xffff_ffff,
+            0x0000_0000,
+            0xffff_ffff,
+            0xffff_ffff,
+            0xffff_ffff,
+            0xffff_ffff,
+            0xffff_fffe,
+        ];
+
+        let b: [u32; 8] = [
+            0x4d940e93, 0xddbcbd41, 0x15ab8f92, 0xf39789f5, 0xcf6509a7, 0x4d5a9e4b, 0x9d9f5e34,
+            0x28e9fa9e,
+        ];
+
+        let (mut r, c) = add_raw2(&a, &b);
+        r.reverse();
+        println!("{:?}", r);
+    }
+
+    #[test]
+    fn test_bn_sub() {
+        let a: [u32; 8] = [
+            0xffff_fffe,
+            0xffff_ffff,
+            0xffff_ffff,
+            0xffff_ffff,
+            0xffff_ffff,
+            0x0000_0000,
+            0xffff_ffff,
+            0xffff_fffc,
+        ];
+
+        let b: [u32; 8] = [
+            0x28e9_fa9e,
+            0x9d9f_5e34,
+            0x4d5a_9e4b,
+            0xcf65_09a7,
+            0xf397_89f5,
+            0x15ab_8f92,
+            0xddbc_bd41,
+            0x4d94_0e93,
+        ];
+
+        let (r, c) = sub_raw(&a, &b);
+        println!("{:?}", r);
+
+        let a: [u32; 8] = [
+            0xffff_fffc,
+            0xffff_ffff,
+            0x0000_0000,
+            0xffff_ffff,
+            0xffff_ffff,
+            0xffff_ffff,
+            0xffff_ffff,
+            0xffff_fffe,
+        ];
+
+        let b: [u32; 8] = [
+            0x4d940e93, 0xddbcbd41, 0x15ab8f92, 0xf39789f5, 0xcf6509a7, 0x4d5a9e4b, 0x9d9f5e34,
+            0x28e9fa9e,
+        ];
+
+        let (mut r, c) = sub_raw2(&a, &b);
+        r.reverse();
+        println!("{:?}", r);
+    }
+
+    #[test]
+    fn test_bn_mul() {
+        let a: [u32; 8] = [
+            0xffff_fffe,
+            0xffff_ffff,
+            0xffff_ffff,
+            0xffff_ffff,
+            0xffff_ffff,
+            0x0000_0000,
+            0xffff_ffff,
+            0xffff_fffc,
+        ];
+
+        let b: [u32; 8] = [
+            0x28e9_fa9e,
+            0x9d9f_5e34,
+            0x4d5a_9e4b,
+            0xcf65_09a7,
+            0xf397_89f5,
+            0x15ab_8f92,
+            0xddbc_bd41,
+            0x4d94_0e93,
+        ];
+
+        let r = mul_raw(&a, &b);
+        println!("{:?}", r);
+
+        let a: [u32; 8] = [
+            0xffff_fffc,
+            0xffff_ffff,
+            0x0000_0000,
+            0xffff_ffff,
+            0xffff_ffff,
+            0xffff_ffff,
+            0xffff_ffff,
+            0xffff_fffe,
+        ];
+
+        let b: [u32; 8] = [
+            0x4d940e93, 0xddbcbd41, 0x15ab8f92, 0xf39789f5, 0xcf6509a7, 0x4d5a9e4b, 0x9d9f5e34,
+            0x28e9fa9e,
+        ];
+        //
+        // let mut r = mul_raw2(&a, &b);
+        // r.reverse();
+        // println!("{:?}", r);
+    }
+}
