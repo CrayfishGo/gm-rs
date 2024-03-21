@@ -92,7 +92,6 @@ impl Sm2PublicKey {
                 c3_append.extend_from_slice(msg);
                 c3_append.extend_from_slice(&y2_bytes);
                 let c3 = sm3_hash(&c3_append);
-
                 let mut c: Vec<u8> = vec![];
                 match model {
                     Sm2Model::C1C2C3 => {
@@ -330,16 +329,21 @@ impl Sm2PrivateKey {
         }
 
         let m = BigUint::from_bytes_be(c2_bytes) ^ BigUint::from_bytes_be(&t);
+        let mut mb = m.to_bytes_be();
+        if mb.len() < kelen {
+            for i in 0..kelen - mb.len() {
+                mb.insert(i, 0);
+            }
+        }
         let mut prepend: Vec<u8> = vec![];
         prepend.extend_from_slice(&x2_bytes);
-        prepend.extend_from_slice(&m.to_bytes_be());
+        prepend.extend_from_slice(&mb);
         prepend.extend_from_slice(&y2_bytes);
-
         let u = sm3_hash(&prepend);
         if u != c3_bytes {
             return Err(Sm2Error::HashNotEqual);
         }
-        Ok(m.to_bytes_be())
+        Ok(mb)
     }
 
     pub fn to_hex_string(&self) -> String {

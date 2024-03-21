@@ -443,3 +443,100 @@ fn sm9_fp2_mul_fp(a: &Sm9Fp2, k: &[u64; 8]) -> Sm9Fp2 {
     r[1] = sm9_fp_mul(&a[1], k);
     r
 }
+
+fn sm9_fp2_sqr(a: &Sm9Fp2) -> Sm9Fp2 {
+    let mut r: Sm9Fp2 = SM9_FP2_ZERO;
+    let mut r0 = SM9_ZERO;
+    let mut r1 = SM9_ZERO;
+    let mut t = SM9_ZERO;
+
+    // r0 = a0^2 - 2 * a1^2
+    r0 = sm9_fp_sqr(&a[0]);
+    t = sm9_fp_sqr(&a[1]);
+    t = sm9_fp_dbl(&t);
+    r0 = sm9_fp_sub(&r0, &t);
+
+    // r1 = 2 * a0 * a1
+    r1 = sm9_fp_mul(&a[0], &a[1]);
+    r1 = sm9_fp_dbl(&r1);
+    r[0] = r0;
+    r[1] = r1;
+    r
+}
+
+
+fn sm9_fp2_sqr_u(a: &Sm9Fp2) -> Sm9Fp2 {
+    let mut r: Sm9Fp2 = SM9_FP2_ZERO;
+    let mut r0 = SM9_ZERO;
+    let mut r1 = SM9_ZERO;
+    let mut t = SM9_ZERO;
+
+    // r0 = -4 * a0 * a1
+    r0 = sm9_fp_mul(&a[0], &a[1]);
+    r0 = sm9_fp_dbl(&r0);
+    r0 = sm9_fp_dbl(&r0);
+    r0 = sm9_fp_neg(&r0);
+
+    // r1 = a0^2 - 2 * a1^2
+    r1 = sm9_fp_sqr(&a[0]);
+    t = sm9_fp_sqr(&a[1]);
+    t = sm9_fp_dbl(&t);
+    r1 = sm9_fp_sub(&r1, &t);
+
+    r[0] = r0;
+    r[1] = r1;
+    r
+}
+
+
+fn sm9_fp2_inv(a: &Sm9Fp2) -> Sm9Fp2 {
+    let mut r: Sm9Fp2 = SM9_FP2_ZERO;
+
+    let mut k = SM9_ZERO;
+    let mut t = SM9_ZERO;
+
+    let mut r0 = SM9_ZERO;
+    let mut r1 = SM9_ZERO;
+
+    if sm9_bn_is_zero(&a[0]) {
+        // r0 = 0
+        // r1 = -(2 * a1)^-1
+        r1 = sm9_fp_dbl(&a[1]);
+        r1 = sm9_fp_inv(&a[1]);
+        r1 = sm9_fp_neg(&r1);
+    } else if sm9_bn_is_zero(&a[1]) {
+        // r1 = 0
+        // r0 = a0^-1
+        r0 = sm9_fp_inv(&a[0]);
+    } else {
+        // k = (a[0]^2 + 2 * a[1]^2)^-1
+        k = sm9_fp_sqr(&a[0]);
+        t = sm9_fp_sqr(&a[1]);
+        t = sm9_fp_dbl(&t);
+        k = sm9_fp_add(&k, &t);
+        k = sm9_fp_inv(&k);
+
+        // r[0] = a[0] * k
+        r0 = sm9_fp_mul(&a[0], &k);
+
+        // r[1] = -a[1] * k
+        r1 = sm9_fp_mul(&a[1], &k);
+        r1 = sm9_fp_neg(&r1);
+    }
+    r[0] = r0;
+    r[1] = r1;
+    r
+}
+
+
+fn sm9_fp2_div(a: &Sm9Fp2, b: &Sm9Fp2) -> Sm9Fp2 {
+    let t: Sm9Fp2 = sm9_fp2_inv(&b);
+    sm9_fp2_mul(a, &t)
+}
+
+fn sm9_fp2_div2(a: &Sm9Fp2) -> Sm9Fp2 {
+    let mut r: Sm9Fp2 = SM9_FP2_ZERO;
+    r[0] = sm9_fp_div2(&a[0]);
+    r[1] = sm9_fp_div2(&a[1]);
+    r
+}

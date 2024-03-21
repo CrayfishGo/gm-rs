@@ -81,8 +81,9 @@ mod test_sm2 {
     #[test]
     fn test_encrypt_decrypt_with_gen_key() {
         let (pk, sk) = gen_keypair().unwrap();
-        let msg = "你好 world,asjdkajhdjadahkubbhj12893718927391873891,@@！！ world,1231 wo12321321313asdadadahello world，hello world".as_bytes();
-        let encrypt = pk.encrypt(msg, false, Sm2Model::C1C2C3).unwrap();
+        let msg = vec![00, 0, 100, 0, 134];
+        // let msg = "你好 hello world".as_bytes();
+        let encrypt = pk.encrypt(&msg, false, Sm2Model::C1C2C3).unwrap();
         let plain = sk.decrypt(&encrypt, false, Sm2Model::C1C2C3).unwrap();
         println!("public key {}", pk.to_hex_string(false));
         println!("private key {}", sk.to_hex_string());
