@@ -106,10 +106,6 @@ impl FieldElement for Fp2 {
         r
     }
 
-    fn pow(&self, rhs: &[u64; 8]) -> Self {
-        todo!()
-    }
-
     fn neg(&self) -> Self {
         Fp2 {
             c0: self.c0.neg(),
@@ -165,12 +161,12 @@ impl FieldElement for Fp2 {
 }
 
 impl Fp2 {
-    fn div(&self, rhs: &Self) -> Self {
+    pub(crate) fn div(&self, rhs: &Self) -> Self {
         let t = rhs.inverse();
         self.mul(&t)
     }
 
-    fn mul_u(&self, rhs: &Self) -> Self {
+    pub(crate) fn mul_u(&self, rhs: &Self) -> Self {
         let mut r: Fp2 = Fp2::zero();
         let mut r0 = Fp::zero();
         let mut r1 = Fp::zero();
@@ -193,14 +189,14 @@ impl Fp2 {
         r
     }
 
-    fn mul_fp(&self, k: &Fp) -> Self {
+    pub(crate) fn mul_fp(&self, k: &Fp) -> Self {
         Fp2 {
             c0: self.c0.mul(k),
             c1: self.c1.mul(k),
         }
     }
 
-    fn sqr_u(&self) -> Self {
+    pub(crate) fn sqr_u(&self) -> Self {
         let mut r: Fp2 = Fp2::zero();
         let mut r0 = Fp::zero();
         let mut r1 = Fp::zero();

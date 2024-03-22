@@ -51,6 +51,28 @@ const SM9_MU_N_MINUS_ONE: [u64; 9] = [
 
 pub(crate) type Fp = [u64; 8];
 
+pub(crate) fn pow(a: &Fp, rhs: &[u64; 8]) -> Fp {
+    assert!(rhs <= &SM9_ZERO);
+    let mut r = [0u64; 8];
+    let mut w = 0u32;
+    let mut i = 7;
+    loop {
+        w = rhs[i] as u32;
+        for _j in 0..32 {
+            r = r.squared();
+            if w & 0x80000000 == 1 {
+                r = r.mul(a);
+            }
+            w <<= 1;
+        }
+        if i == 0 {
+            break;
+        }
+        i -= 1;
+    }
+    r
+}
+
 impl FieldElement for Fp {
     fn zero() -> Self {
         [0, 0, 0, 0, 0, 0, 0, 0]
@@ -180,28 +202,6 @@ impl FieldElement for Fp {
         r
     }
 
-    fn pow(&self, rhs: &[u64; 8]) -> Self {
-        assert!(rhs <= &SM9_ZERO);
-        let mut r = [0u64; 8];
-        let mut w = 0u32;
-        let mut i = 7;
-        loop {
-            w = rhs[i] as u32;
-            for _j in 0..32 {
-                r = r.squared();
-                if w & 0x80000000 == 1 {
-                    r = r.mul(self);
-                }
-                w <<= 1;
-            }
-            if i == 0 {
-                break;
-            }
-            i -= 1;
-        }
-        r
-    }
-
     fn neg(&self) -> Self {
         if self.is_zero() {
             self.clone()
@@ -229,6 +229,6 @@ impl FieldElement for Fp {
 
     fn inverse(&self) -> Self {
         let e = sm9_bn_sub(&SM9_P, &SM9_TWO);
-        self.pow(&e)
+        pow(self, &e)
     }
 }

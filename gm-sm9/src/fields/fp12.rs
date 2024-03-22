@@ -16,17 +16,25 @@ impl PartialEq for Fp12 {
 
 impl Eq for Fp12 {}
 
-impl FieldElement for Fp12{
+impl FieldElement for Fp12 {
     fn zero() -> Self {
-        todo!()
+        Self {
+            c0: Fp4::zero(),
+            c1: Fp4::zero(),
+            c2: Fp4::zero(),
+        }
     }
 
     fn one() -> Self {
-        todo!()
+        Self {
+            c0: Fp4::one(),
+            c1: Fp4::zero(),
+            c2: Fp4::zero(),
+        }
     }
 
     fn is_zero(&self) -> bool {
-        todo!()
+        self.c0.is_zero() && self.c1.is_zero() && self.c2.is_zero()
     }
 
     fn squared(&self) -> Self {
@@ -34,35 +42,52 @@ impl FieldElement for Fp12{
     }
 
     fn double(&self) -> Self {
-        todo!()
+        Self {
+            c0: self.c0.double(),
+            c1: self.c1.double(),
+            c2: self.c2.double(),
+        }
     }
 
     fn triple(&self) -> Self {
-        todo!()
+        let t = self.double();
+        t.add(self)
     }
 
     fn add(&self, rhs: &Self) -> Self {
-        todo!()
+        Self {
+            c0: self.c0.add(&rhs.c0),
+            c1: self.c1.add(&rhs.c1),
+            c2: self.c2.add(&rhs.c2),
+        }
     }
 
     fn sub(&self, rhs: &Self) -> Self {
-        todo!()
+        Self {
+            c0: self.c0.sub(&rhs.c0),
+            c1: self.c1.sub(&rhs.c1),
+            c2: self.c2.sub(&rhs.c2),
+        }
     }
 
     fn mul(&self, rhs: &Self) -> Self {
         todo!()
     }
 
-    fn pow(&self, rhs: &[u64; 8]) -> Self {
-        todo!()
-    }
-
     fn neg(&self) -> Self {
-        todo!()
+        Self {
+            c0: self.c0.neg(),
+            c1: self.c1.neg(),
+            c2: self.c2.neg(),
+        }
     }
 
     fn div2(&self) -> Self {
-        todo!()
+        Self {
+            c0: self.c0.div2(),
+            c1: self.c1.div2(),
+            c2: self.c2.div2(),
+        }
     }
 
     fn inverse(&self) -> Self {
