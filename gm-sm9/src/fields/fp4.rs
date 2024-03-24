@@ -1,6 +1,22 @@
-use crate::fields::FieldElement;
-use crate::fields::fp2::Fp2;
 use crate::fields::fp::Fp;
+use crate::fields::fp2::Fp2;
+use crate::fields::FieldElement;
+use crate::u256::U256;
+
+pub(crate) const SM9_FP4_ZERO: [[U256; 2]; 2] =
+    [[[0, 0, 0, 0], [0, 0, 0, 0]], [[0, 0, 0, 0], [0, 0, 0, 0]]];
+pub(crate) const SM9_FP4_MONT_ONE: [[U256; 2]; 2] = [
+    [
+        [
+            0x1a9064d81caeba83,
+            0xde0d6cb4e5851124,
+            0x29fc54b00a7138ba,
+            0x49bffffffd5c590e,
+        ],
+        [0, 0, 0, 0],
+    ],
+    [[0, 0, 0, 0], [0, 0, 0, 0]],
+];
 
 #[derive(Debug, Copy, Clone)]
 pub struct Fp4 {
@@ -10,7 +26,7 @@ pub struct Fp4 {
 
 impl PartialEq for Fp4 {
     fn eq(&self, other: &Self) -> bool {
-        todo!()
+        self.c0.eq(&other.c0) && self.c1.eq(&other.c1)
     }
 }
 
@@ -35,107 +51,123 @@ impl FieldElement for Fp4 {
         self.c0.is_zero() && self.c1.is_zero()
     }
 
-    fn squared(&self) -> Self {
+    fn fp_sqr(&self) -> Self {
         let mut r0 = Fp2::zero();
         let mut r1 = Fp2::zero();
         let mut t = Fp2::zero();
 
-        r0 = self.c0.squared();
-        t = self.c1.sqr_u();
-        r0 = r0.add(&t);
+        r1 = self.c0.fp_add(&self.c1);
+        r1 = r1.fp_sqr();
 
-        r1 = self.c0.mul(&self.c1);
-        r1 = r1.double();
+        r0 = self.c0.fp_sqr();
+        t = self.c1.fp_sqr();
 
+        r1 = r1.fp_sub(&r0);
+        r1 = r1.fp_sub(&t);
+
+        t = t.a_mul_u();
+        r0 = r0.fp_add(&t);
+
+        Self { c0: r0, c1: r1 }
+    }
+
+    fn fp_double(&self) -> Self {
         Self {
-            c0: r0,
-            c1: r1,
+            c0: self.c0.fp_double(),
+            c1: self.c1.fp_double(),
         }
     }
 
-    fn double(&self) -> Self {
+    fn fp_triple(&self) -> Self {
         Self {
-            c0: self.c0.double(),
-            c1: self.c1.double(),
+            c0: self.c0.fp_triple(),
+            c1: self.c1.fp_triple(),
         }
     }
 
-    fn triple(&self) -> Self {
+    fn fp_add(&self, rhs: &Self) -> Self {
         Self {
-            c0: self.c0.triple(),
-            c1: self.c1.triple(),
+            c0: self.c0.fp_add(&rhs.c0),
+            c1: self.c1.fp_add(&rhs.c1),
         }
     }
 
-    fn add(&self, rhs: &Self) -> Self {
+    fn fp_sub(&self, rhs: &Self) -> Self {
         Self {
-            c0: self.c0.add(&rhs.c0),
-            c1: self.c1.add(&rhs.c1),
+            c0: self.c0.fp_sub(&rhs.c0),
+            c1: self.c1.fp_sub(&rhs.c1),
         }
     }
 
-    fn sub(&self, rhs: &Self) -> Self {
-        Self {
-            c0: self.c0.sub(&rhs.c0),
-            c1: self.c1.sub(&rhs.c1),
-        }
-    }
-
-    fn mul(&self, rhs: &Self) -> Self {
+    fn fp_mul(&self, rhs: &Self) -> Self {
         let mut r0 = Fp2::zero();
         let mut r1 = Fp2::zero();
         let mut t = Fp2::zero();
 
-        r0 = self.c0.mul(&rhs.c0);
-        t = self.c1.mul_u(&rhs.c1);
-        r0 = r0.add(&t);
+        r0 = self.c0.fp_add(&self.c1);
+        t = rhs.c0.fp_add(&rhs.c1);
+        r1 = t.fp_mul(&r0);
 
-        r1 = self.c0.mul(&rhs.c1);
-        t = self.c1.mul(&rhs.c0);
-        r1 = r1.add(&t);
+        r0 = self.c0.fp_mul(&rhs.c0);
+        t = self.c1.fp_mul(&rhs.c1);
 
+        r1 = r1.fp_sub(&r0);
+        r1 = r1.fp_sub(&t);
+
+        t = t.a_mul_u();
+        r0 = r0.fp_add(&t);
+
+        Self { c0: r0, c1: r1 }
+    }
+
+    fn fp_neg(&self) -> Self {
         Self {
-            c0: r0,
-            c1: r1,
+            c0: self.c0.fp_neg(),
+            c1: self.c1.fp_neg(),
         }
     }
 
-    fn neg(&self) -> Self {
+    fn fp_div2(&self) -> Self {
         Self {
-            c0: self.c0.neg(),
-            c1: self.c1.neg(),
+            c0: self.c0.fp_div2(),
+            c1: self.c1.fp_div2(),
         }
     }
 
-    fn div2(&self) -> Self {
-        Self {
-            c0: self.c0.div2(),
-            c1: self.c1.div2(),
-        }
-    }
-
-    fn inverse(&self) -> Self {
+    fn fp_inv(&self) -> Self {
         let mut r0 = Fp2::zero();
         let mut r1 = Fp2::zero();
         let mut k = Fp2::zero();
 
         k = self.c1.sqr_u();
-        r0 = self.c0.squared();
-        k = k.sub(&r0);
-        k = k.inverse();
-        r0 = self.c0.mul(&k);
-        r0 = r0.neg();
+        r0 = self.c0.fp_sqr();
+        k = k.fp_sub(&r0);
+        k = k.fp_inv();
 
-        r1 = self.c1.mul(&k);
+        r0 = self.c0.fp_mul(&k);
+        r0 = r0.fp_neg();
 
-        Self {
-            c0: r0,
-            c1: r1,
-        }
+        r1 = self.c1.fp_mul(&k);
+
+        Self { c0: r0, c1: r1 }
     }
 }
 
 impl Fp4 {
+    pub(crate) fn mont_one() -> Self {
+        Fp4 {
+            c0: Fp2 {
+                c0: [
+                    0x1a9064d81caeba83,
+                    0xde0d6cb4e5851124,
+                    0x29fc54b00a7138ba,
+                    0x49bffffffd5c590e,
+                ],
+                c1: [0, 0, 0, 0],
+            },
+            c1: Fp2::zero(),
+        }
+    }
     pub(crate) fn mul_fp(&self, k: &Fp) -> Self {
         Self {
             c0: self.c0.mul_fp(k),
@@ -145,8 +177,8 @@ impl Fp4 {
 
     pub(crate) fn mul_fp2(&self, k: &Fp2) -> Self {
         Self {
-            c0: self.c0.mul(k),
-            c1: self.c1.mul(k),
+            c0: self.c0.fp_mul(k),
+            c1: self.c1.fp_mul(k),
         }
     }
 
@@ -157,16 +189,34 @@ impl Fp4 {
 
         r0 = self.c0.mul_u(&b.c1);
         t = self.c1.mul_u(&b.c0);
-        r0 = r0.add(&t);
+        r0 = r0.fp_add(&t);
 
-        r1 = self.c0.mul(&b.c0);
+        r1 = self.c0.fp_mul(&b.c0);
         t = self.c1.mul_u(&b.c1);
-        r1 = r1.add(&t);
+        r1 = r1.fp_add(&t);
 
-        Self {
-            c0: r0,
-            c1: r1,
-        }
+        Self { c0: r0, c1: r1 }
+    }
+
+    pub(crate) fn a_mul_v(&self) -> Self {
+        let mut r0 = Fp2::zero();
+        let mut a0 = Fp2::zero();
+        let mut a1 = Fp2::zero();
+
+        a0 = self.c0;
+        a1 = self.c1;
+
+        //r1 = a0
+        //r0 = a1 * u
+        r0 = a1.a_mul_u();
+
+        Self { c0: r0, c1: a0 }
+    }
+
+    pub(crate) fn conjugate(&self) -> Self {
+        let r0 = self.c0;
+        let r1 = self.c1.fp_neg();
+        Self { c0: r0, c1: r1 }
     }
 
     pub(crate) fn sqr_v(&self) -> Self {
@@ -175,15 +225,12 @@ impl Fp4 {
         let mut t = Fp2::zero();
 
         t = self.c0.mul_u(&self.c1);
-        r0 = t.double();
+        r0 = t.fp_double();
 
-        r1 = self.c0.squared();
+        r1 = self.c0.fp_sqr();
         t = self.c1.sqr_u();
-        r1 = r1.add(&t);
+        r1 = r1.fp_add(&t);
 
-        Self {
-            c0: r0,
-            c1: r1,
-        }
+        Self { c0: r0, c1: r1 }
     }
 }

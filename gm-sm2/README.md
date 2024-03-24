@@ -2,6 +2,9 @@
 
 A Pure Rust High-Performance Implementation of China's Standards of Encryption Algorithms SM2
 
+- ✅ **SM2 ECDSA**: digital signature algorithm defined in [GBT.32918.2-2016], [ISO.IEC.14888-3] (SM2-2)
+- ✅ **SM2 ECDH**: key exchange protocol defined in [GBT.32918.3-2016] (SM2-3)
+- ✅ **SM2 PKE**: public key encryption algorithm defined in [GBT.32918.4-2016] (SM2-4)
 
 ## Example
 

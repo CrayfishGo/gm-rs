@@ -1,21 +1,17 @@
-const SM9_ZERO: [u64; 8] = [0, 0, 0, 0, 0, 0, 0, 0];
-const SM9_ONE: [u64; 8] = [1, 0, 0, 0, 0, 0, 0, 0];
-const SM9_TWO: [u64; 8] = [2, 0, 0, 0, 0, 0, 0, 0];
-const SM9_FIVE: [u64; 8] = [5, 0, 0, 0, 0, 0, 0, 0];
-
+use crate::u256::U256;
 
 #[derive(Copy, Debug, Clone)]
 pub struct Point {
-    x: [u64; 8],
-    y: [u64; 8],
-    z: [u64; 8],
+    x: U256,
+    y: U256,
+    z: U256,
 }
 
 #[derive(Copy, Debug, Clone)]
 pub struct TwistPoint {
-    x: [[u64; 8]; 2],
-    y: [[u64; 8]; 2],
-    z: [[u64; 8]; 2],
+    x: [U256; 2],
+    y: [U256; 2],
+    z: [U256; 2],
 }
 
 // 群 G1的生成元 P1 = (xP1 , yP1);
@@ -23,12 +19,18 @@ pub struct TwistPoint {
 // P1.Y 0x21FE8DDA4F21E607631065125C395BBC1C1C00CBFA6024350C464CD70A3EA616
 const G1: Point = Point {
     x: [
-        0x7c66dddd, 0xe8c4e481, 0x09dc3280, 0xe1e40869, 0x487d01d6, 0xf5ed0704, 0x62bf718f, 0x93de051d,
+        0xe8c4e4817c66dddd,
+        0xe1e4086909dc3280,
+        0xf5ed0704487d01d6,
+        0x93de051d62bf718f,
     ],
     y: [
-        0x0a3ea616, 0x0c464cd7, 0xfa602435, 0x1c1c00cb, 0x5c395bbc, 0x63106512, 0x4f21e607, 0x21fe8dda,
+        0x0c464cd70a3ea616,
+        0x1c1c00cbfa602435,
+        0x631065125c395bbc,
+        0x21fe8dda4f21e607,
     ],
-    z: [1, 0, 0, 0, 0, 0, 0, 0],
+    z: [1, 0, 0, 0],
 };
 
 /*
@@ -42,101 +44,84 @@ const G1: Point = Point {
 const G2: TwistPoint = TwistPoint {
     x: [
         [
-            0xAF82D65B, 0xF9B7213B, 0xD19C17AB, 0xEE265948, 0xD34EC120, 0xD2AAB97F, 0x92130B08, 0x37227552
+            0xF9B7213BAF82D65B,
+            0xEE265948D19C17AB,
+            0xD2AAB97FD34EC120,
+            0x3722755292130B08,
         ],
         [
-            0xD8806141, 0x54806C11, 0x0F5E93C4, 0xF1DD2C19, 0xB441A01F, 0x597B6027, 0x78640C98, 0x85AEF3D0
+            0x54806C11D8806141,
+            0xF1DD2C190F5E93C4,
+            0x597B6027B441A01F,
+            0x85AEF3D078640C98,
         ],
     ],
     y: [
         [
-            0xC999A7C7, 0x6215BBA5, 0xA71A0811, 0x47EFBA98, 0x3D278FF2, 0x5F317015, 0x19BE3DA6, 0xA7CF28D5
+            0x6215BBA5C999A7C7,
+            0x47EFBA98A71A0811,
+            0x5F3170153D278FF2,
+            0xA7CF28D519BE3DA6,
         ],
         [
-            0x84EBEB96, 0x856DC76B, 0xA347C8BD, 0x0736A96F, 0x2CBEE6ED, 0x66BA0D26, 0x2E845C12, 0x17509B09
+            0x856DC76B84EBEB96,
+            0x0736A96FA347C8BD,
+            0x66BA0D262CBEE6ED,
+            0x17509B092E845C12,
         ],
     ],
-    z: [[1, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0]],
+    z: [[1, 0, 0, 0], [0, 0, 0, 0]],
 };
 
-
-fn sm9_bn_equals(a: &[u64; 8], b: &[u64; 8]) -> bool {
-    for i in 0..8 {
-        if a[i] != b[i] {
-            return false;
-        }
+impl Point {
+    pub fn point_double(&self) -> Self {
+        todo!()
     }
-    return true;
+
+    pub fn point_add(&self, rhs: &Self) -> Self {
+        todo!()
+    }
+
+    pub fn point_sub(&self, rhs: &Self) -> Self {
+        todo!()
+    }
+
+    pub fn point_neg(&self) -> Self {
+        todo!()
+    }
+
+    pub fn point_double_x5(&self) -> Self {
+        let mut r = self.point_double();
+        r = r.point_double();
+        r = r.point_double();
+        r = r.point_double();
+        r = r.point_double();
+        r
+    }
+
+    pub fn point_mul(&self, k: &U256) -> Self {
+        todo!()
+    }
 }
 
-fn sm9_bn_is_one(a: &[u64; 8]) -> bool {
-    return *a == SM9_ONE;
-}
-
-fn sm9_bn_is_zero(a: &[u64; 8]) -> bool {
-    return *a == SM9_ZERO;
-}
-
-#[inline(always)]
-pub(crate) fn sm9_bn_add(a: &[u64; 8], b: &[u64; 8]) -> [u64; 8] {
-    let mut sum = [0; 8];
-    sum[0] = a[0] + b[0];
-    for i in 1..8 {
-        sum[i] = a[i] + b[i] + (sum[i - 1] >> 32);
+impl TwistPoint {
+    pub fn point_double(&self) -> Self {
+        todo!()
     }
-    for i in 0..8 {
-        sum[i] &= 0xffffffff;
+
+    pub fn point_add(&self, rhs: &Self) -> Self {
+        todo!()
     }
-    sum
+
+    pub fn point_sub(&self, rhs: &Self) -> Self {
+        todo!()
+    }
+
+    pub fn point_neg(&self) -> Self {
+        todo!()
+    }
+
+    pub fn point_mul(&self, k: &U256) -> Self {
+        todo!()
+    }
 }
-
-#[inline(always)]
-pub(crate) fn sm9_bn_sub(a: &[u64; 8], b: &[u64; 8]) -> [u64; 8] {
-    let mut r = [0; 8];
-    r[0] = (1u64 << 32) + a[0] - b[0];
-    let mut i = 1;
-    loop {
-        r[i] = 0xffffffff + a[i] - b[i] + (r[i - 1] >> 32);
-        r[i - 1] &= 0xffffffff;
-        if i == 7 {
-            break;
-        }
-        i += 1;
-    }
-    r[i] = a[i] - b[i] + (r[i - 1] >> 32);
-    r[i - 1] &= 0xffffffff;
-    r
-}
-
-#[inline(always)]
-pub(crate) fn sm9_barrett_bn_add(a: &[u64; 9], b: &[u64; 9]) -> [u64; 9] {
-    let mut sum = [0; 9];
-    sum[0] = a[0] + b[0];
-    for i in 1..9 {
-        sum[i] = a[i] + b[i] + (sum[i - 1] >> 32);
-    }
-    for i in 0..9 {
-        sum[i] &= 0xffffffff;
-    }
-    sum
-}
-
-#[inline(always)]
-pub(crate) fn sm9_barrett_bn_sub(a: &[u64; 9], b: &[u64; 9]) -> [u64; 9] {
-    let mut r = [0; 9];
-    r[0] = (1u64 << 32) + a[0] - b[0];
-    let mut i = 1;
-    loop {
-        r[i] = 0xffffffff + a[i] - b[i] + (r[i - 1] >> 32);
-        r[i - 1] &= 0xffffffff;
-        if i == 8 {
-            break;
-        }
-        i += 1;
-    }
-    r[i] = a[i] - b[i] + (r[i - 1] >> 32);
-    r[i - 1] &= 0xffffffff;
-    r
-}
-
-

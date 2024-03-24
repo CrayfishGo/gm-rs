@@ -5,6 +5,7 @@
 mod algorithm;
 pub mod key;
 mod fields;
+mod u256;
 
 pub fn add(left: usize, right: usize) -> usize {
     left + right

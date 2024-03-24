@@ -84,31 +84,6 @@ pub fn kdf(z: &[u8], klen: usize) -> Vec<u8> {
 }
 
 #[inline(always)]
-pub const fn fe32_to_fe64(fe32: &[u32; 8]) -> [u64; 4] {
-    [
-        (fe32[0] as u64) | ((fe32[1] as u64) << 32),
-        (fe32[2] as u64) | ((fe32[3] as u64) << 32),
-        (fe32[4] as u64) | ((fe32[5] as u64) << 32),
-        (fe32[6] as u64) | ((fe32[7] as u64) << 32),
-    ]
-}
-
-#[inline(always)]
-pub const fn fe64_to_fe32(fe64: &[u64; 4]) -> [u32; 8] {
-    let (w0, w1, w2, w3) = (fe64[0], fe64[1], fe64[2], fe64[3]);
-    [
-        (w0 & 0xFFFFFFFF) as u32,
-        (w0 >> 32) as u32,
-        (w1 & 0xFFFFFFFF) as u32,
-        (w1 >> 32) as u32,
-        (w2 & 0xFFFFFFFF) as u32,
-        (w2 >> 32) as u32,
-        (w3 & 0xFFFFFFFF) as u32,
-        (w3 >> 32) as u32,
-    ]
-}
-
-#[inline(always)]
 pub const fn add_raw(a: &[u32; 8], b: &[u32; 8]) -> ([u32; 8], bool) {
     let mut sum = [0; 8];
     let mut carry = false;
@@ -127,6 +102,49 @@ pub const fn add_raw(a: &[u32; 8], b: &[u32; 8]) -> ([u32; 8], bool) {
         i -= 1;
     }
     (sum, carry)
+}
+
+#[inline(always)]
+pub const fn add_raw_u64(a: &[u64; 4], b: &[u64; 4]) -> ([u64; 4], bool) {
+    let mut sum = [0; 4];
+    let mut carry = false;
+    let mut i = 3;
+    loop {
+        let (t_sum, c) = {
+            let (m, c1) = a[i].overflowing_add(b[i]);
+            let (r, c2) = m.overflowing_add(carry as u64);
+            (r & 0xffff_ffff_ffff_ffff, c1 || c2)
+        };
+        sum[i] = t_sum;
+        carry = c;
+        if i == 0 {
+            break;
+        }
+        i -= 1;
+    }
+    (sum, carry)
+}
+
+#[inline(always)]
+pub const fn sub_raw_u64(a: &[u64; 4], b: &[u64; 4]) -> ([u64; 4], bool) {
+    let mut r = [0; 4];
+    let mut borrow = false;
+    let mut j = 0;
+    loop {
+        let i = 3 - j;
+        let (diff, bor) = {
+            let (a, b1) = a[i].overflowing_sub(borrow as u64);
+            let (res, b2) = a.overflowing_sub(b[i]);
+            (res, b1 || b2)
+        };
+        r[i] = diff;
+        borrow = bor;
+        if j == 3 {
+            break;
+        }
+        j += 1;
+    }
+    (r, borrow)
 }
 
 #[inline(always)]
@@ -188,3 +206,96 @@ pub const fn mul_raw(a: &[u32; 8], b: &[u32; 8]) -> [u32; 16] {
     ret
 }
 
+#[inline(always)]
+pub const fn mul_raw_u64(a: &[u64; 4], b: &[u64; 4]) -> [u64; 8] {
+    let mut local: u128 = 0;
+    let mut carry: u128 = 0;
+    let mut ret: [u64; 8] = [0; 8];
+    let mut ret_idx = 0;
+    while ret_idx < 7 {
+        let index = 7 - ret_idx;
+        let mut a_idx = 0;
+        while a_idx < 4 {
+            if a_idx > ret_idx {
+                break;
+            }
+            let b_idx = ret_idx - a_idx;
+            if b_idx < 4 {
+                let (hi, lo) = {
+                    let uv = (a[3 - a_idx] as u128) * (b[3 - b_idx] as u128);
+                    let u = uv >> 64;
+                    let v = uv & 0xffff_ffff_ffff_ffff;
+                    (u, v)
+                };
+                local += lo;
+                carry += hi;
+            }
+            a_idx += 1;
+        }
+        carry += local >> 64;
+        local &= 0xffff_ffff_ffff_ffff;
+        ret[index] = local as u64;
+        local = carry;
+        carry = 0;
+        ret_idx += 1;
+    }
+    ret[0] = local as u64;
+    ret
+}
+
+#[cfg(test)]
+mod test_operation {
+    use num_bigint::BigUint;
+    use num_traits::Num;
+
+    use crate::util::{add_raw_u64, mul_raw_u64, sub_raw_u64};
+
+    #[test]
+    fn test_raw_add_u64() {
+        let a: [u64; 4] = [
+            0xF9B7213BAF82D65B,
+            0xEE265948D19C17AB,
+            0xD2AAB97FD34EC120,
+            0x3722755292130B08,
+        ];
+
+        let b: [u64; 4] = [
+            0x54806C11D8806141,
+            0xF1DD2C190F5E93C4,
+            0x597B6027B441A01F,
+            0x85AEF3D078640C98,
+        ];
+
+        let a1 = BigUint::from_str_radix(
+            "F9B7213BAF82D65BEE265948D19C17ABD2AAB97FD34EC1203722755292130B08",
+            16,
+        )
+            .unwrap();
+        let b1 = BigUint::from_str_radix(
+            "54806C11D8806141F1DD2C190F5E93C4597B6027B441A01F85AEF3D078640C98",
+            16,
+        )
+            .unwrap();
+
+        let (r, c) = add_raw_u64(&a, &b);
+        println!("sum r={:?}", r);
+
+        let mut sum = (&a1 + &b1).to_u64_digits();
+        sum.reverse();
+        println!("sum r={:?}", &sum[1..]);
+
+        let (r, c) = sub_raw_u64(&a, &b);
+        println!("sub r={:?}", r);
+
+        let mut sub = (&a1 - &b1).to_u64_digits();
+        sub.reverse();
+        println!("sub r={:?}", sub.as_slice());
+
+        let r = mul_raw_u64(&a, &b);
+        println!("mul r={:?}", r);
+
+        let mut mul = (&a1 * &b1).to_u64_digits();
+        mul.reverse();
+        println!("mul r={:?}", mul.as_slice());
+    }
+}
