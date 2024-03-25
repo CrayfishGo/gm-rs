@@ -2,10 +2,11 @@
 #![doc = include_str!("../README.md")]
 
 
-mod algorithm;
+
+pub(crate) mod algorithm;
 pub mod key;
-mod fields;
-mod u256;
+pub mod fields;
+pub mod u256;
 
 pub fn add(left: usize, right: usize) -> usize {
     left + right

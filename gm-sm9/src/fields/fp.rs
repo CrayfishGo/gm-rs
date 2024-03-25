@@ -1,5 +1,8 @@
 use crate::fields::FieldElement;
-use crate::u256::{u256_add, u256_mul, u256_mul_low, u256_sub, u512_add, U256};
+use crate::u256::{
+    sm9_u256_from_bytes, sm9_u256_to_bytes, u256_add, u256_mul, u256_mul_low, u256_sub, u512_add,
+    U256,
+};
 
 pub(crate) const SM9_ZERO: U256 = [0, 0, 0, 0];
 pub(crate) const SM9_ONE: U256 = [1, 0, 0, 0];
@@ -82,7 +85,7 @@ const SM9_MODP_MONT_FIVE: U256 = [
     0x43fffffed866f63,
 ];
 
-pub(crate) type Fp = U256;
+pub type Fp = U256;
 
 pub(crate) fn pow(a: &Fp, e: &U256) -> Fp {
     let mut r = SM9_MODP_MONT_ONE;
@@ -101,11 +104,22 @@ pub(crate) fn pow(a: &Fp, e: &U256) -> Fp {
 }
 
 pub(crate) fn to_mont(a: &Fp) -> Fp {
-    a.mont_mul(&SM9_MODP_2E512)
+    mont_mul(a, &SM9_MODP_2E512)
 }
 
 pub(crate) fn from_mont(a: &Fp) -> Fp {
-    a.mont_mul(&SM9_ONE)
+    mont_mul(a, &SM9_ONE)
+}
+
+pub(crate) fn fp_to_bytes(a: &Fp) -> [u8; 32] {
+    let t = from_mont(a);
+    sm9_u256_to_bytes(&t)
+}
+
+pub(crate) fn fp_from_bytes(buf: &[u8; 32]) -> Fp {
+    let mut t = sm9_u256_from_bytes(buf);
+    t = to_mont(&t);
+    t
 }
 
 pub(crate) fn mont_mul(a: &Fp, b: &Fp) -> Fp {

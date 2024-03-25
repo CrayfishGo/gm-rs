@@ -1,10 +1,11 @@
+use crate::fields::fp::Fp;
 use crate::u256::U256;
 
 #[derive(Copy, Debug, Clone)]
 pub struct Point {
-    x: U256,
-    y: U256,
-    z: U256,
+    x: Fp,
+    y: Fp,
+    z: Fp,
 }
 
 #[derive(Copy, Debug, Clone)]

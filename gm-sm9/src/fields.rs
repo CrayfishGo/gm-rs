@@ -1,10 +1,10 @@
 use std::fmt::Debug;
 use std::ops::{Add, Mul, MulAssign, Neg, Sub};
 
-mod fp;
-mod fp12;
-mod fp2;
-mod fp4;
+pub(crate) mod fp;
+pub(crate) mod fp12;
+pub(crate) mod fp2;
+pub(crate) mod fp4;
 
 pub trait FieldElement: Sized + Copy + Clone + PartialEq + Eq + Debug {
     fn zero() -> Self;
