@@ -25,6 +25,13 @@ pub(crate) const SM9_P: U256 = [
     0xb640000002a3a6f1,
 ];
 
+
+// e = p - 2 = b640000002a3a6f1d603ab4ff58ec74521f2934b1a7aeedbe56f9b27e351457b
+// p - 2, used in a^(p-2) = a^-1
+pub(crate) const SM9_P_MINUS_TWO: U256 = [
+    0xe56f9b27e351457b, 0x21f2934b1a7aeedb, 0xd603ab4ff58ec745, 0xb640000002a3a6f1
+];
+
 /// 群的阶 N(t) = 36t^4 + 36t^3 + 18t^2 + 6t + 1
 ///
 /// n =  B6400000 02A3A6F1 D603AB4F F58EC744 49F2934B 18EA8BEE E56EE19C D69ECF25
@@ -87,7 +94,7 @@ const SM9_MODP_MONT_FIVE: U256 = [
 
 pub type Fp = U256;
 
-pub(crate) fn pow(a: &Fp, e: &U256) -> Fp {
+pub(crate) fn fp_pow(a: &Fp, e: &U256) -> Fp {
     let mut r = SM9_MODP_MONT_ONE;
     let mut w = 0u64;
     for i in (0..4).rev() {
@@ -235,7 +242,6 @@ impl FieldElement for Fp {
     }
 
     fn fp_inv(&self) -> Self {
-        let e = u256_sub(&SM9_P, &SM9_TWO).0;
-        pow(self, &e)
+        fp_pow(self, &SM9_P_MINUS_TWO)
     }
 }
