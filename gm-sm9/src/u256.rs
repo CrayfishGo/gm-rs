@@ -1,6 +1,12 @@
 pub type U256 = [u64; 4];
 pub type U512 = [u64; 8];
 
+pub(crate) const SM9_ZERO: U256 = [0, 0, 0, 0];
+pub(crate) const SM9_ONE: U256 = [1, 0, 0, 0];
+pub(crate) const SM9_TWO: U256 = [2, 0, 0, 0];
+pub(crate) const SM9_FIVE: U256 = [5, 0, 0, 0];
+
+
 #[inline(always)]
 pub const fn u256_add(a: &U256, b: &U256) -> (U256, bool) {
     let mut sum = [0; 4];

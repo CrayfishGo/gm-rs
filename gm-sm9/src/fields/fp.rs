@@ -1,13 +1,6 @@
+use rand::RngCore;
 use crate::fields::FieldElement;
-use crate::u256::{
-    sm9_u256_from_bytes, sm9_u256_to_bytes, u256_add, u256_mul, u256_mul_low, u256_sub, u512_add,
-    U256,
-};
-
-pub(crate) const SM9_ZERO: U256 = [0, 0, 0, 0];
-pub(crate) const SM9_ONE: U256 = [1, 0, 0, 0];
-pub(crate) const SM9_TWO: U256 = [2, 0, 0, 0];
-pub(crate) const SM9_FIVE: U256 = [5, 0, 0, 0];
+use crate::u256::{sm9_u256_from_bytes, sm9_u256_to_bytes, u256_add, u256_mul, u256_mul_low, u256_sub, u512_add, U256, SM9_ONE, SM9_ZERO};
 
 /// 本文使用256位的BN曲线。
 ///
@@ -19,12 +12,12 @@ pub(crate) const SM9_FIVE: U256 = [5, 0, 0, 0];
 ///
 /// p =  B6400000 02A3A6F1 D603AB4F F58EC745 21F2934B 1A7AEEDB E56F9B27 E351457D
 pub(crate) const SM9_P: U256 = [
-    0xe56f9b27e351457d,
-    0x21f2934b1a7aeedb,
-    0xd603ab4ff58ec745,
-    0xb640000002a3a6f1,
+    0xe56f9b27e351457d, 0x21f2934b1a7aeedb, 0xd603ab4ff58ec745, 0xb640000002a3a6f1
 ];
 
+pub(crate) const SM9_P_MINUS_ONE: U256 = [
+    0xe56f9b27e351457c, 0x21f2934b1a7aeedb, 0xd603ab4ff58ec745, 0xb640000002a3a6f1
+];
 
 // e = p - 2 = b640000002a3a6f1d603ab4ff58ec74521f2934b1a7aeedbe56f9b27e351457b
 // p - 2, used in a^(p-2) = a^-1
@@ -32,30 +25,6 @@ pub(crate) const SM9_P_MINUS_TWO: U256 = [
     0xe56f9b27e351457b, 0x21f2934b1a7aeedb, 0xd603ab4ff58ec745, 0xb640000002a3a6f1
 ];
 
-/// 群的阶 N(t) = 36t^4 + 36t^3 + 18t^2 + 6t + 1
-///
-/// n =  B6400000 02A3A6F1 D603AB4F F58EC744 49F2934B 18EA8BEE E56EE19C D69ECF25
-const SM9_N: U256 = [
-    0xe56ee19cd69ecf25,
-    0x49f2934b18ea8bee,
-    0xd603ab4ff58ec744,
-    0xb640000002a3a6f1,
-];
-
-const SM9_N_NEG: U256 = [
-    0x1a911e63296130db,
-    0xb60d6cb4e7157411,
-    0x29fc54b00a7138bb,
-    0x49bffffffd5c590e,
-];
-
-/// N - 1
-const SM9_N_MINUS_ONE: U256 = [
-    0xe56ee19cd69ecf24,
-    0x49f2934b18ea8bee,
-    0xd603ab4ff58ec744,
-    0xb640000002a3a6f1,
-];
 
 // p = b640000002a3a6f1d603ab4ff58ec74521f2934b1a7aeedbe56f9b27e351457d
 // p' = -p^(-1) mod 2^256 = afd2bac5558a13b3966a4b291522b137181ae39613c8dbaf892bc42c2f2ee42b
@@ -93,6 +62,23 @@ const SM9_MODP_MONT_FIVE: U256 = [
 ];
 
 pub type Fp = U256;
+
+
+#[inline(always)]
+pub fn fp_random_u256() -> U256 {
+    let mut rng = rand::thread_rng();
+    let mut buf: [u8; 32] = [0; 32];
+    let mut ret;
+    loop {
+        rng.fill_bytes(&mut buf[..]);
+        ret = sm9_u256_from_bytes(&buf);
+        if ret < SM9_P_MINUS_ONE && ret != [0, 0, 0, 0] {
+            break;
+        }
+    }
+    ret
+}
+
 
 pub(crate) fn fp_pow(a: &Fp, e: &U256) -> Fp {
     let mut r = SM9_MODP_MONT_ONE;

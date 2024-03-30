@@ -5,6 +5,7 @@ pub(crate) mod fp;
 pub(crate) mod fp12;
 pub(crate) mod fp2;
 pub(crate) mod fp4;
+pub(crate) mod r#fn;
 
 pub trait FieldElement: Sized + Copy + Clone + PartialEq + Eq + Debug {
     fn zero() -> Self;
