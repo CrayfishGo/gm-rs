@@ -1,6 +1,6 @@
 use rand::RngCore;
 
-use crate::u256::{SM9_ONE, sm9_u256_from_bytes, U256, u256_add, u256_mul, u256_sub};
+use crate::u256::{sm9_u256_from_bytes, u256_add, u256_cmp, u256_mul, u256_sub, SM9_ONE, U256};
 
 /// 群的阶 N(t) = 36t^4 + 36t^3 + 18t^2 + 6t + 1
 ///
@@ -28,7 +28,6 @@ const SM9_N_MINUS_ONE: U256 = [
     0xb640000002a3a6f1,
 ];
 
-
 /// N - 2
 const SM9_N_MINUS_TWO: U256 = [
     0xe56ee19cd69ecf23,
@@ -37,11 +36,13 @@ const SM9_N_MINUS_TWO: U256 = [
     0xb640000002a3a6f1,
 ];
 
-
 const SM9_N_BARRETT_MU: [u64; 5] = [
-    0x74df4fd4dfc97c2f, 0x9c95d85ec9c073b0, 0x55f73aebdcd1312c, 0x67980e0beb5759a6, 0x1
+    0x74df4fd4dfc97c2f,
+    0x9c95d85ec9c073b0,
+    0x55f73aebdcd1312c,
+    0x67980e0beb5759a6,
+    0x1,
 ];
-
 
 #[inline(always)]
 pub fn fn_random_u256() -> U256 {
@@ -64,7 +65,7 @@ pub fn fn_add(a: &U256, b: &U256) -> U256 {
         // a + b - n = (a + b - 2^256) + (2^256 - n)
         return u256_add(&r, &SM9_N_NEG).0;
     }
-    if r >= SM9_N {
+    if u256_cmp(&r, &SM9_N) >= 0 {
         return u256_sub(&r, &SM9_N).0;
     }
     r
@@ -78,41 +79,34 @@ pub fn fn_sub(a: &U256, b: &U256) -> U256 {
     r
 }
 
-
 #[inline(always)]
-pub const fn u256_mul_5(a: &[u64; 5], b: &[u64; 5]) -> [u64; 10] {
-    let mut local: u128 = 0;
-    let mut carry: u128 = 0;
+pub const fn u320_mul(a: &[u64; 5], b: &[u64; 5]) -> [u64; 10] {
+    let mut a_: [u64; 10] = [0; 10];
+    let mut b_: [u64; 10] = [0; 10];
     let mut ret: [u64; 10] = [0; 10];
-    let mut ret_idx = 0;
-    while ret_idx < 9 {
-        let index = 9 - ret_idx;
-        let mut a_idx = 0;
-        while a_idx < 5 {
-            if a_idx > ret_idx {
-                break;
-            }
-            let b_idx = ret_idx - a_idx;
-            if b_idx < 5 {
-                let (hi, lo) = {
-                    let uv = (a[4 - a_idx] as u128) * (b[4 - b_idx] as u128);
-                    let u = uv >> 64;
-                    let v = uv & 0xffff_ffff_ffff_ffff;
-                    (u, v)
-                };
-                local += lo;
-                carry += hi;
-            }
-            a_idx += 1;
-        }
-        carry += local >> 64;
-        local &= 0xffff_ffff_ffff_ffff;
-        ret[index] = local as u64;
-        local = carry;
-        carry = 0;
-        ret_idx += 1;
+    let mut s: [u64; 20] = [0; 20];
+
+    for i in 0..5 {
+        a_[2 * i] = a[i] & 0xffffffff;
+        b_[2 * i] = b[i] & 0xffffffff;
+        a_[2 * i + 1] = a[i] >> 32;
+        b_[2 * i + 1] = b[i] >> 32;
     }
-    ret[0] = local as u64;
+
+    let mut u = 0;
+    for i in 0..10 {
+        u = 0;
+        for j in 0..10 {
+            u = s[i + j] + a_[i] * b_[j] + u;
+            s[i + j] = u & 0xffffffff;
+            u >>= 32;
+        }
+        s[i + 10] = u;
+    }
+
+    for i in 0..10 {
+        ret[i] = (s[2 * i + 1] << 32) | s[2 * i];
+    }
     ret
 }
 
@@ -123,7 +117,7 @@ pub fn fn_mul(a: &U256, b: &U256) -> U256 {
 
     // (z // 2^192) = z[3-7]
     let z1: [u64; 5] = [z[3], z[4], z[5], z[6], z[7]];
-    let h = u256_mul_5(&z1, &SM9_N_BARRETT_MU);
+    let h = u320_mul(&z1, &SM9_N_BARRETT_MU);
 
     // (h // 2^320) = h[6-9]
     let h1: [u64; 4] = [h[6], h[7], h[8], h[9]];
@@ -153,7 +147,7 @@ pub fn fn_mul(a: &U256, b: &U256) -> U256 {
     t = z[4] - c;
     s[4] = t - s[4];
 
-    if s[4] > 0 || r >= SM9_N {
+    if s[4] > 0 || u256_cmp(&r, &SM9_N) >= 0 {
         r = u256_sub(&r, &SM9_N).0;
     }
     r

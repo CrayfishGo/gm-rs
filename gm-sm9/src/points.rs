@@ -1,4 +1,5 @@
 use crate::fields::fp::Fp;
+use crate::fields::FieldElement;
 use crate::u256::U256;
 
 #[derive(Copy, Debug, Clone)]
@@ -75,20 +76,80 @@ const G2: TwistPoint = TwistPoint {
 };
 
 impl Point {
+    pub fn zero() -> Self {
+        Self {
+            x: Fp::one(),
+            y: Fp::one(),
+            z: Fp::zero(),
+        }
+    }
+
+    pub fn is_zero(&self) -> bool {
+        self.z.is_zero()
+    }
+
     pub fn point_double(&self) -> Self {
-        todo!()
+        if self.is_zero() {
+            return self.clone();
+        }
+        let mut x1 = self.x;
+        let mut y1 = self.y;
+        let z1 = self.z;
+
+        let mut t1 = Fp::zero();
+        let mut t2 = Fp::zero();
+        let mut t3 = Fp::zero();
+
+        let mut x3 = Fp::zero();
+        let mut y3 = Fp::zero();
+        let mut z3 = Fp::zero();
+
+        t2 = x1.fp_sqr();
+        t2 = t2.fp_triple();
+        y3 = y1.fp_double();
+        z3 = y3.fp_mul(&z1);
+        y3 = y3.fp_sqr();
+        t3 = y3.fp_mul(&x1);
+        y3 = y3.fp_sqr();
+        y3 = y3.fp_div2();
+        x3 = t2.fp_sqr();
+
+        t1 = t3.fp_double();
+        x3 = x3.fp_sub(&t1);
+        t1 = t3.fp_sub(&x3);
+        t1 = t1.fp_mul(&t2);
+        y3 = t1.fp_sub(&y3);
+
+        Self {
+            x: x3,
+            y: y3,
+            z: z3,
+        }
     }
 
     pub fn point_add(&self, rhs: &Self) -> Self {
+        if rhs.is_zero() {
+            return self.clone();
+        }
+
+        if self.is_zero() {
+            return rhs.clone();
+        }
+
         todo!()
     }
 
     pub fn point_sub(&self, rhs: &Self) -> Self {
-        todo!()
+        let t = rhs.point_neg();
+        self.point_add(&t)
     }
 
     pub fn point_neg(&self) -> Self {
-        todo!()
+        Point {
+            x: self.x.clone(),
+            y: self.y.fp_neg().clone(),
+            z: self.z.clone(),
+        }
     }
 
     pub fn point_double_x5(&self) -> Self {

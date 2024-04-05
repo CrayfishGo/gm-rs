@@ -1,6 +1,10 @@
 use rand::RngCore;
+
 use crate::fields::FieldElement;
-use crate::u256::{sm9_u256_from_bytes, sm9_u256_to_bytes, u256_add, u256_mul, u256_mul_low, u256_sub, u512_add, U256, SM9_ONE, SM9_ZERO};
+use crate::u256::{
+    SM9_ONE, sm9_u256_from_bytes, sm9_u256_to_bytes, SM9_ZERO, U256, u256_add, u256_cmp,
+    u256_mul, u256_sub, u512_add,
+};
 
 /// 本文使用256位的BN曲线。
 ///
@@ -12,23 +16,34 @@ use crate::u256::{sm9_u256_from_bytes, sm9_u256_to_bytes, u256_add, u256_mul, u2
 ///
 /// p =  B6400000 02A3A6F1 D603AB4F F58EC745 21F2934B 1A7AEEDB E56F9B27 E351457D
 pub(crate) const SM9_P: U256 = [
-    0xe56f9b27e351457d, 0x21f2934b1a7aeedb, 0xd603ab4ff58ec745, 0xb640000002a3a6f1
+    0xe56f9b27e351457d,
+    0x21f2934b1a7aeedb,
+    0xd603ab4ff58ec745,
+    0xb640000002a3a6f1,
 ];
 
 pub(crate) const SM9_P_MINUS_ONE: U256 = [
-    0xe56f9b27e351457c, 0x21f2934b1a7aeedb, 0xd603ab4ff58ec745, 0xb640000002a3a6f1
+    0xe56f9b27e351457c,
+    0x21f2934b1a7aeedb,
+    0xd603ab4ff58ec745,
+    0xb640000002a3a6f1,
 ];
 
-// e = p - 2 = b640000002a3a6f1d603ab4ff58ec74521f2934b1a7aeedbe56f9b27e351457b
-// p - 2, used in a^(p-2) = a^-1
+/// e = p - 2 = b640000002a3a6f1d603ab4ff58ec74521f2934b1a7aeedbe56f9b27e351457b
+///
+/// p - 2, used in a^(p-2) = a^-1
 pub(crate) const SM9_P_MINUS_TWO: U256 = [
-    0xe56f9b27e351457b, 0x21f2934b1a7aeedb, 0xd603ab4ff58ec745, 0xb640000002a3a6f1
+    0xe56f9b27e351457b,
+    0x21f2934b1a7aeedb,
+    0xd603ab4ff58ec745,
+    0xb640000002a3a6f1,
 ];
 
-
-// p = b640000002a3a6f1d603ab4ff58ec74521f2934b1a7aeedbe56f9b27e351457d
-// p' = -p^(-1) mod 2^256 = afd2bac5558a13b3966a4b291522b137181ae39613c8dbaf892bc42c2f2ee42b
-// sage: -(IntegerModRing(2^256)(p))^-1
+/// p = b640000002a3a6f1d603ab4ff58ec74521f2934b1a7aeedbe56f9b27e351457d
+///
+/// p' = -p^(-1) mod 2^256 = afd2bac5558a13b3966a4b291522b137181ae39613c8dbaf892bc42c2f2ee42b
+///
+/// sage: -(IntegerModRing(2^256)(p))^-1
 const SM9_P_PRIME: U256 = [
     0x892bc42c2f2ee42b,
     0x181ae39613c8dbaf,
@@ -40,7 +55,6 @@ const SM9_P_PRIME: U256 = [
 // mu = p^-1 mod 2^64 = 0x76d43bd3d0d11bd5
 // 2^512 mod p = 0x2ea795a656f62fbde479b522d6706e7b88f8105fae1a5d3f27dea312b417e2d2
 // mont(1) mod p = 2^256 mod p = 0x49bffffffd5c590e29fc54b00a7138bade0d6cb4e58511241a9064d81caeba83
-
 const SM9_MODP_MU: u64 = 0x76d43bd3d0d11bd5_u64;
 const SM9_MODP_2E512: U256 = [
     0x27dea312b417e2d2,
@@ -63,7 +77,6 @@ const SM9_MODP_MONT_FIVE: U256 = [
 
 pub type Fp = U256;
 
-
 #[inline(always)]
 pub fn fp_random_u256() -> U256 {
     let mut rng = rand::thread_rng();
@@ -72,13 +85,12 @@ pub fn fp_random_u256() -> U256 {
     loop {
         rng.fill_bytes(&mut buf[..]);
         ret = sm9_u256_from_bytes(&buf);
-        if ret < SM9_P_MINUS_ONE && ret != [0, 0, 0, 0] {
+        if u256_cmp(&ret, &SM9_P_MINUS_ONE) < 0 && ret != [0, 0, 0, 0] {
             break;
         }
     }
     ret
 }
-
 
 pub(crate) fn fp_pow(a: &Fp, e: &U256) -> Fp {
     let mut r = SM9_MODP_MONT_ONE;
@@ -144,7 +156,7 @@ pub(crate) fn mont_mul(a: &Fp, b: &Fp) -> Fp {
     r = [z[4], z[5], z[6], z[7]];
     if c {
         r = u256_add(&r, &SM9_MODP_MONT_ONE).0;
-    } else if r >= SM9_P {
+    } else if u256_cmp(&r, &SM9_P) >= 0 {
         r = u256_sub(&r, &SM9_P).0
     }
     r
@@ -160,7 +172,7 @@ impl FieldElement for Fp {
     }
 
     fn is_zero(&self) -> bool {
-        self[0] == 0
+        self == &SM9_ZERO
     }
 
     fn fp_sqr(&self) -> Self {
@@ -178,18 +190,20 @@ impl FieldElement for Fp {
     fn fp_add(&self, rhs: &Self) -> Self {
         let (r, c) = u256_add(self, rhs);
         if c {
-            let (diff, _borrow) = u256_sub(&r, &SM9_P);
-            diff
-        } else {
-            r
+            let (diff, _borrow) = u256_add(&r, &SM9_MODP_MONT_ONE);
+            return diff;
         }
+        if u256_cmp(&r, &SM9_P) >= 0 {
+            let (diff, _borrow) = u256_sub(&r, &SM9_P);
+            return diff;
+        }
+        r
     }
 
     fn fp_sub(&self, rhs: &Self) -> Self {
         let (raw_diff, borrow) = u256_sub(&self, rhs);
         if borrow {
-            let (modulus_complete, _) = u256_sub(&[0; 4], &SM9_P);
-            let (diff, _borrow) = u256_sub(&raw_diff, &modulus_complete);
+            let (diff, _borrow) = u256_sub(&raw_diff, &SM9_MODP_MONT_ONE);
             diff
         } else {
             raw_diff
@@ -229,5 +243,78 @@ impl FieldElement for Fp {
 
     fn fp_inv(&self) -> Self {
         fp_pow(self, &SM9_P_MINUS_TWO)
+    }
+}
+
+#[cfg(test)]
+mod test_mod_operation {
+    use num_bigint::BigUint;
+
+    use crate::fields::FieldElement;
+    use crate::fields::fp::{from_mont, to_mont};
+
+    #[test]
+    fn test_mod_op() {
+        let mut a: [u64; 4] = [
+            0x54806C11D8806141,
+            0xF1DD2C190F5E93C4,
+            0x597B6027B441A01F,
+            0x85AEF3D078640C98,
+        ];
+
+        let mut b: [u64; 4] = [
+            0x0E75C05FB4E3216D,
+            0x1006E85F5CDFF073,
+            0x1A7CE027B7A46F74,
+            0x41E00A53DDA532DA,
+        ];
+
+        let p: [u64; 4] = [
+            0xe56f9b27e351457d,
+            0x21f2934b1a7aeedb,
+            0xd603ab4ff58ec745,
+            0xb640000002a3a6f1,
+        ];
+
+
+        let a1 = BigUint::from_bytes_be(
+            &hex::decode("85AEF3D078640C98597B6027B441A01FF1DD2C190F5E93C454806C11D8806141")
+                .unwrap(),
+        );
+
+        let b1 = BigUint::from_bytes_be(
+            &hex::decode("41E00A53DDA532DA1A7CE027B7A46F741006E85F5CDFF0730E75C05FB4E3216D")
+                .unwrap(),
+        );
+
+        let p1 = BigUint::from_bytes_be(
+            &hex::decode("B640000002A3A6F1D603AB4FF58EC74521F2934B1A7AEEDBE56F9B27E351457D")
+                .unwrap(),
+        );
+
+        let mut r = a.fp_add(&b);
+        r.reverse();
+        println!("fp_add ={:x?}", r);
+        let mut sum = ((&a1 + &b1) % &p1).to_u64_digits();
+        sum.reverse();
+        println!("fp_add ={:x?}", &sum);
+
+        let mut r = a.fp_sub(&b);
+        r.reverse();
+        println!("fp_sub ={:x?}", r);
+        let mut sub = ((&a1 - &b1) % &p1).to_u64_digits();
+        sub.reverse();
+        println!("fp_sub ={:x?}", &sub);
+
+        a = to_mont(&a);
+        b = to_mont(&b);
+        let mut r = a.fp_mul(&b);
+        r = from_mont(&r);
+        r.reverse();
+        println!("fp_mul ={:x?}", r); // 9e4d19bb5d94a47352e6f53f4116b2a71b16a1113dc789b26528ee19f46b72e0
+
+        let mut mul = ((&a1 * &b1) % &p1).to_u64_digits();
+        mul.reverse();
+        println!("fp_mul ={:x?}", mul.as_slice());
     }
 }
