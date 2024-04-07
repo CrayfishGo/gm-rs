@@ -256,7 +256,6 @@ impl Fp2 {
     }
 }
 
-
 #[cfg(test)]
 mod test_mod_operation {
     use crate::fields::FieldElement;
@@ -266,13 +265,33 @@ mod test_mod_operation {
     #[test]
     fn test_mod_op() {
         let mut a: Fp2 = Fp2 {
-            c0: [0x6215BBA5C999A7C7, 0x47EFBA98A71A0811, 0x5F3170153D278FF2, 0xA7CF28D519BE3DA6],
-            c1: [0x856DC76B84EBEB96, 0x0736A96FA347C8BD, 0x66BA0D262CBEE6ED, 0x17509B092E845C12],
+            c0: [
+                0x6215BBA5C999A7C7,
+                0x47EFBA98A71A0811,
+                0x5F3170153D278FF2,
+                0xA7CF28D519BE3DA6,
+            ],
+            c1: [
+                0x856DC76B84EBEB96,
+                0x0736A96FA347C8BD,
+                0x66BA0D262CBEE6ED,
+                0x17509B092E845C12,
+            ],
         };
 
         let mut b: Fp2 = Fp2 {
-            c0: [0x8F14D65696EA5E32, 0x414D2177386A92DD, 0x6CE843ED24A3B573, 0x29DBA116152D1F78],
-            c1: [0x0AB1B6791B94C408, 0x1CE0711C5E392CFB, 0xE48AFF4B41B56501, 0x9F64080B3084F733],
+            c0: [
+                0x8F14D65696EA5E32,
+                0x414D2177386A92DD,
+                0x6CE843ED24A3B573,
+                0x29DBA116152D1F78,
+            ],
+            c1: [
+                0x0AB1B6791B94C408,
+                0x1CE0711C5E392CFB,
+                0xE48AFF4B41B56501,
+                0x9F64080B3084F733,
+            ],
         };
 
         a.c0 = to_mont(&a.c0);
@@ -284,6 +303,8 @@ mod test_mod_operation {
         let mut r = a.fp_add(&b);
         r.c0 = from_mont(&r.c0);
         r.c1 = from_mont(&r.c1);
-        println!("fp_add ={:x?}", r);
+        r.c0.reverse();
+        r.c1.reverse();
+        println!("fp_add ={:x?}", r); // [1b6ac9eb2c47b62c, f61608b26c3c7e20, 674a48c4c509ac13, bbaf6d47d32c07c], c1: [74a3145c65ac54, 7541612178e584a9, 2248740e70606dc, aaafe2bcbd2f6a21]
     }
 }

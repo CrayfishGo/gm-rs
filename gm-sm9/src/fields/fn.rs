@@ -160,7 +160,7 @@ pub fn fn_pow(a: &U256, e: &U256) -> U256 {
         w = e[i];
         for j in 0..64 {
             r = fn_mul(&r, &r);
-            if w & 0x8000000000000000 == 1 {
+            if w & 0x8000000000000000 != 0 {
                 r = fn_mul(&r, a);
             }
             w <<= 1;

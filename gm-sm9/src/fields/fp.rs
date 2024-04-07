@@ -2,8 +2,8 @@ use rand::RngCore;
 
 use crate::fields::FieldElement;
 use crate::u256::{
-    SM9_ONE, u256_from_be_bytes, u256_to_be_bytes, SM9_ZERO, U256, u256_add, u256_cmp,
-    u256_mul, u256_sub, u512_add,
+    u256_add, u256_cmp, u256_from_be_bytes, u256_mul, u256_sub, u256_to_be_bytes, u512_add,
+    SM9_ONE, SM9_ZERO, U256,
 };
 
 /// 本文使用256位的BN曲线。
@@ -99,7 +99,7 @@ pub(crate) fn fp_pow(a: &Fp, e: &U256) -> Fp {
         w = e[i];
         for j in 0..64 {
             r = r.fp_sqr();
-            if w & 0x8000000000000000 == 1 {
+            if w & 0x8000000000000000 != 0 {
                 r = r.fp_mul(a);
             }
             w <<= 1;
@@ -248,8 +248,8 @@ impl FieldElement for Fp {
 
 #[cfg(test)]
 mod test_mod_operation {
-    use crate::fields::FieldElement;
     use crate::fields::fp::{fp_pow, from_mont, to_mont};
+    use crate::fields::FieldElement;
 
     #[test]
     fn test_mod_op() {
@@ -288,7 +288,6 @@ mod test_mod_operation {
         r.reverse();
         println!("fp_mul ={:x?}", r); // 9e4d19bb5d94a47352e6f53f4116b2a71b16a1113dc789b26528ee19f46b72e0
 
-
         let mut r = a.fp_double();
         r = from_mont(&r);
         r.reverse();
@@ -309,12 +308,10 @@ mod test_mod_operation {
         r.reverse();
         println!("fp_neg ={:x?}", r); // 30910c2f8a3f9a597c884b28414d2725301567320b1c5b1790ef2f160ad0e43c
 
-
         let mut r = a.fp_sqr();
         r = from_mont(&r);
         r.reverse();
         println!("fp_sqr ={:x?}", r); // 46dc2a5b8853234b341d9c57f9c4ca5709e95bbfef25356812e884e4f38cd0d6
-
 
         b = from_mont(&b);
         let mut r = fp_pow(&a, &b);
