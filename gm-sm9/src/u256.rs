@@ -153,24 +153,25 @@ pub fn u256_mul(a: &U256, b: &U256) -> U512 {
 }
 
 #[inline(always)]
-pub fn sm9_u256_to_bytes(a: &U256) -> [u8; 32] {
+pub fn u256_to_be_bytes(a: &U256) -> [u8; 32] {
     let mut out = [0; 32];
-    out[0..8].copy_from_slice(&a[3].to_le_bytes());
-    out[8..16].copy_from_slice(&a[2].to_le_bytes());
-    out[16..24].copy_from_slice(&a[1].to_le_bytes());
-    out[24..32].copy_from_slice(&a[0].to_le_bytes());
+    out[0..8].copy_from_slice(&a[3].to_be_bytes());
+    out[8..16].copy_from_slice(&a[2].to_be_bytes());
+    out[16..24].copy_from_slice(&a[1].to_be_bytes());
+    out[24..32].copy_from_slice(&a[0].to_be_bytes());
     out
 }
 
 #[inline(always)]
-pub fn sm9_u256_from_bytes(input: &[u8; 32]) -> U256 {
+pub fn u256_from_be_bytes(input: &[u8]) -> U256 {
     let mut r: U256 = [0_u64; 4];
-    r[3] = u64::from_le_bytes(input[0..8].try_into().unwrap());
-    r[2] = u64::from_le_bytes(input[8..16].try_into().unwrap());
-    r[1] = u64::from_le_bytes(input[16..24].try_into().unwrap());
-    r[0] = u64::from_le_bytes(input[24..32].try_into().unwrap());
+    r[3] = u64::from_be_bytes(input[0..8].try_into().unwrap());
+    r[2] = u64::from_be_bytes(input[8..16].try_into().unwrap());
+    r[1] = u64::from_be_bytes(input[16..24].try_into().unwrap());
+    r[0] = u64::from_be_bytes(input[24..32].try_into().unwrap());
     r
 }
+
 
 #[cfg(test)]
 mod test_operation {

@@ -1,5 +1,5 @@
-use crate::fields::fp::Fp;
 use crate::fields::FieldElement;
+use crate::fields::fp::Fp;
 use crate::u256::U256;
 
 const SM9_FP2_ZERO: [U256; 2] = [[0, 0, 0, 0], [0, 0, 0, 0]];
@@ -253,5 +253,37 @@ impl Fp2 {
         r.c0 = r0;
         r.c1 = r1;
         r
+    }
+}
+
+
+#[cfg(test)]
+mod test_mod_operation {
+    use crate::fields::FieldElement;
+    use crate::fields::fp::{from_mont, to_mont};
+    use crate::fields::fp2::Fp2;
+
+    #[test]
+    fn test_mod_op() {
+        let mut a: Fp2 = Fp2 {
+            c0: [0x6215BBA5C999A7C7, 0x47EFBA98A71A0811, 0x5F3170153D278FF2, 0xA7CF28D519BE3DA6],
+            c1: [0x856DC76B84EBEB96, 0x0736A96FA347C8BD, 0x66BA0D262CBEE6ED, 0x17509B092E845C12],
+        };
+
+        let mut b: Fp2 = Fp2 {
+            c0: [0x8F14D65696EA5E32, 0x414D2177386A92DD, 0x6CE843ED24A3B573, 0x29DBA116152D1F78],
+            c1: [0x0AB1B6791B94C408, 0x1CE0711C5E392CFB, 0xE48AFF4B41B56501, 0x9F64080B3084F733],
+        };
+
+        a.c0 = to_mont(&a.c0);
+        a.c1 = to_mont(&a.c1);
+
+        b.c0 = to_mont(&b.c0);
+        b.c1 = to_mont(&b.c1);
+
+        let mut r = a.fp_add(&b);
+        r.c0 = from_mont(&r.c0);
+        r.c1 = from_mont(&r.c1);
+        println!("fp_add ={:x?}", r);
     }
 }

@@ -1,6 +1,6 @@
 use rand::RngCore;
 
-use crate::u256::{sm9_u256_from_bytes, u256_add, u256_cmp, u256_mul, u256_sub, SM9_ONE, U256};
+use crate::u256::{u256_from_be_bytes, u256_add, u256_cmp, u256_mul, u256_sub, SM9_ONE, U256};
 
 /// 群的阶 N(t) = 36t^4 + 36t^3 + 18t^2 + 6t + 1
 ///
@@ -51,7 +51,7 @@ pub fn fn_random_u256() -> U256 {
     let mut ret;
     loop {
         rng.fill_bytes(&mut buf[..]);
-        ret = sm9_u256_from_bytes(&buf);
+        ret = u256_from_be_bytes(&buf);
         if ret < SM9_N_MINUS_ONE && ret != [0, 0, 0, 0] {
             break;
         }
@@ -80,7 +80,7 @@ pub fn fn_sub(a: &U256, b: &U256) -> U256 {
 }
 
 #[inline(always)]
-pub const fn u320_mul(a: &[u64; 5], b: &[u64; 5]) -> [u64; 10] {
+pub fn u320_mul(a: &[u64; 5], b: &[u64; 5]) -> [u64; 10] {
     let mut a_: [u64; 10] = [0; 10];
     let mut b_: [u64; 10] = [0; 10];
     let mut ret: [u64; 10] = [0; 10];
@@ -174,5 +174,5 @@ pub fn fn_inv(a: &U256) -> U256 {
 }
 
 pub fn fn_from_bytes(buf: &[u8; 32]) -> U256 {
-    sm9_u256_from_bytes(buf)
+    u256_from_be_bytes(buf)
 }
