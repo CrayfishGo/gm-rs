@@ -16,3 +16,12 @@ num-integer = "0.1.44"
 gm-sm3 = { version = "0.10.0", path = "../gm-sm3" }
 num-bigint = "0.4.4"
 yasna = { version = "0.5.2", features = ["num-bigint"] }
+
+[dev-dependencies]
+criterion = "0.4"
+hex-literal = "0.3"
+
+
+[[bench]]
+name = "sm9"
+harness = false

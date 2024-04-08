@@ -4,10 +4,10 @@ use num_traits::{FromPrimitive, One, Zero};
 
 use gm_sm3::sm3_hash;
 
-use crate::{FeOperation, p256_ecc};
 use crate::error::{Sm2Error, Sm2Result};
-use crate::p256_ecc::{P256C_PARAMS, Point};
-use crate::util::{compute_za, DEFAULT_ID, kdf, random_uint};
+use crate::p256_ecc::{Point, P256C_PARAMS};
+use crate::util::{compute_za, kdf, random_uint, xor_bytes, DEFAULT_ID};
+use crate::{p256_ecc, FeOperation};
 
 pub enum Sm2Model {
     C1C2C3,
@@ -27,9 +27,7 @@ impl Sm2PublicKey {
     pub fn new(pk: &[u8]) -> Sm2Result<Sm2PublicKey> {
         let p = Point::from_byte(pk)?;
         if p.is_valid() {
-            Ok(Self {
-                point: p,
-            })
+            Ok(Self { point: p })
         } else {
             Err(Sm2Error::InvalidPublic)
         }
@@ -39,9 +37,13 @@ impl Sm2PublicKey {
         self.point.is_valid()
     }
 
-
     /// Encrypt the given message and return ASN.1 data
-    pub fn encrypt_asn1(&self, msg: &[u8], compressed: bool, model: Sm2Model) -> Sm2Result<Vec<u8>> {
+    pub fn encrypt_asn1(
+        &self,
+        msg: &[u8],
+        compressed: bool,
+        model: Sm2Model,
+    ) -> Sm2Result<Vec<u8>> {
         let cipher = self.encrypt(msg, compressed, model).unwrap();
         let x = BigUint::from_bytes_be(&cipher[0..32]);
         let y = BigUint::from_bytes_be(&cipher[32..64]);
@@ -86,7 +88,7 @@ impl Sm2PublicKey {
                 }
             }
             if !flag {
-                let c2 = BigUint::from_bytes_be(msg) ^ BigUint::from_bytes_be(&t[..]);
+                let c2 = xor_bytes(msg, &t[..]);
                 let mut c3_append: Vec<u8> = vec![];
                 c3_append.extend_from_slice(&x2_bytes);
                 c3_append.extend_from_slice(msg);
@@ -96,13 +98,13 @@ impl Sm2PublicKey {
                 match model {
                     Sm2Model::C1C2C3 => {
                         c.extend_from_slice(&c1_p.to_byte_be(compressed));
-                        c.extend_from_slice(&c2.to_bytes_be());
+                        c.extend_from_slice(&c2);
                         c.extend_from_slice(&c3);
                     }
                     Sm2Model::C1C3C2 => {
                         c.extend_from_slice(&c1_p.to_byte_be(compressed));
                         c.extend_from_slice(&c3);
-                        c.extend_from_slice(&c2.to_bytes_be());
+                        c.extend_from_slice(&c2);
                     }
                 }
                 return Ok(c);
@@ -159,12 +161,10 @@ impl Sm2PublicKey {
     pub fn from_hex_string(hex_str: &str) -> Result<Self, FromHexError> {
         let bytes = hex::decode(hex_str);
         match bytes {
-            Ok(b) => {
-                Ok(Self {
-                    point: Point::from_byte(b.as_slice()).unwrap()
-                })
-            }
-            Err(e) => { Err(e) }
+            Ok(b) => Ok(Self {
+                point: Point::from_byte(b.as_slice()).unwrap(),
+            }),
+            Err(e) => Err(e),
         }
     }
 
@@ -178,7 +178,6 @@ pub struct Sm2PrivateKey {
     pub d: BigUint,
     pub public_key: Sm2PublicKey,
 }
-
 
 impl Eq for Sm2PrivateKey {}
 
@@ -195,15 +194,11 @@ impl AsRef<Sm2PublicKey> for Sm2PrivateKey {
     }
 }
 
-
 impl Sm2PrivateKey {
     pub fn new(sk: &[u8]) -> Sm2Result<Self> {
         let d = BigUint::from_bytes_be(sk);
         let public_key = public_from_private(&d)?;
-        let private_key = Self {
-            d,
-            public_key,
-        };
+        let private_key = Self { d, public_key };
 
         Ok(private_key)
     }
@@ -227,6 +222,7 @@ impl Sm2PrivateKey {
         }
         let e = BigUint::from_bytes_be(&digest);
         let n = &P256C_PARAMS.n;
+        let s1 = &(BigUint::one() + sk).modpow(&(n - BigUint::from_u32(2).unwrap()), n);
         loop {
             let k = random_uint();
             let p_x = p256_ecc::g_mul(&k).to_affine_point();
@@ -236,15 +232,11 @@ impl Sm2PrivateKey {
                 continue;
             }
 
-            let s1 = &(BigUint::one() + sk).modpow(&(n - BigUint::from_u32(2).unwrap()), n);
-
             let s2_1 = r.mod_mul(&sk, n);
             let s2 = k.mod_sub(&s2_1, n);
-
             let s = s1.mod_mul(&s2, n);
-
             if s.is_zero() {
-                return Err(Sm2Error::ZeroSig);
+                continue;
             }
             let mut sig: Vec<u8> = vec![];
             sig.extend_from_slice(&r.to_bytes_be());
@@ -254,7 +246,12 @@ impl Sm2PrivateKey {
     }
 
     /// Decrypt the given ASN.1 message.
-    pub fn decrypt_asn1(&self, ciphertext: &[u8], compressed: bool, model: Sm2Model) -> Sm2Result<Vec<u8>> {
+    pub fn decrypt_asn1(
+        &self,
+        ciphertext: &[u8],
+        compressed: bool,
+        model: Sm2Model,
+    ) -> Sm2Result<Vec<u8>> {
         let (x, y, sm3, secret) = yasna::parse_der(ciphertext, |reader| {
             reader.read_sequence(|reader| {
                 let x = reader.next().read_biguint()?;
@@ -263,7 +260,8 @@ impl Sm2PrivateKey {
                 let secret = reader.next().read_bytes()?;
                 return Ok((x, y, sm3, secret));
             })
-        }).unwrap();
+        })
+        .unwrap();
         let x = BigUint::to_bytes_be(&x);
         let y = BigUint::to_bytes_be(&y);
         let mut cipher: Vec<u8> = vec![];
@@ -275,7 +273,12 @@ impl Sm2PrivateKey {
     }
 
     /// Decrypt the given message.
-    pub fn decrypt(&self, ciphertext: &[u8], compressed: bool, model: Sm2Model) -> Sm2Result<Vec<u8>> {
+    pub fn decrypt(
+        &self,
+        ciphertext: &[u8],
+        compressed: bool,
+        model: Sm2Model,
+    ) -> Sm2Result<Vec<u8>> {
         let c1_end_index = match compressed {
             true => 33,
             false => 65,
@@ -283,20 +286,12 @@ impl Sm2PrivateKey {
         let c1_bytes = &ciphertext[0..c1_end_index];
         let len = ciphertext.len();
         let c2_bytes = match model {
-            Sm2Model::C1C2C3 => {
-                &ciphertext[c1_end_index..(len - 32)]
-            }
-            Sm2Model::C1C3C2 => {
-                &ciphertext[(c1_end_index + 32)..]
-            }
+            Sm2Model::C1C2C3 => &ciphertext[c1_end_index..(len - 32)],
+            Sm2Model::C1C3C2 => &ciphertext[(c1_end_index + 32)..],
         };
         let c3_bytes = match model {
-            Sm2Model::C1C2C3 => {
-                &ciphertext[(len - 32)..]
-            }
-            Sm2Model::C1C3C2 => {
-                &ciphertext[c1_end_index..c1_end_index + 32]
-            }
+            Sm2Model::C1C2C3 => &ciphertext[(len - 32)..],
+            Sm2Model::C1C3C2 => &ciphertext[c1_end_index..c1_end_index + 32],
         };
 
         let kelen = c2_bytes.len();
@@ -328,8 +323,8 @@ impl Sm2PrivateKey {
             return Err(Sm2Error::ZeroData);
         }
 
-        let m = BigUint::from_bytes_be(c2_bytes) ^ BigUint::from_bytes_be(&t);
-        let mut mb = m.to_bytes_be();
+        let m = xor_bytes(c2_bytes, &t);
+        let mut mb = m;
         if mb.len() < kelen {
             for i in 0..kelen - mb.len() {
                 mb.insert(i, 0);
@@ -357,11 +352,11 @@ impl Sm2PrivateKey {
             Ok(b) => {
                 let r = Self::new(b.as_slice());
                 match r {
-                    Ok(sk) => { Ok(sk) }
-                    Err(e) => { Err(e.to_string()) }
+                    Ok(sk) => Ok(sk),
+                    Err(e) => Err(e.to_string()),
                 }
             }
-            Err(e) => { Err(e.to_string()) }
+            Err(e) => Err(e.to_string()),
         }
     }
 
@@ -374,19 +369,14 @@ impl Sm2PrivateKey {
 pub fn gen_keypair() -> Sm2Result<(Sm2PublicKey, Sm2PrivateKey)> {
     let d = random_uint();
     let pk = public_from_private(&d)?;
-    let sk = Sm2PrivateKey {
-        d,
-        public_key: pk,
-    };
+    let sk = Sm2PrivateKey { d, public_key: pk };
     Ok((pk, sk))
 }
 
 fn public_from_private(sk: &BigUint) -> Sm2Result<Sm2PublicKey> {
     let p = p256_ecc::g_mul(&sk);
     if p.is_valid() {
-        Ok(Sm2PublicKey {
-            point: p,
-        })
+        Ok(Sm2PublicKey { point: p })
     } else {
         Err(Sm2Error::InvalidPublic)
     }

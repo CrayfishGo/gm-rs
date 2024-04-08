@@ -55,6 +55,16 @@ pub fn compute_za(id: &str, pk: &Sm2PublicKey) -> Sm2Result<[u8; 32]> {
     Ok(sm3_hash(&prepend))
 }
 
+pub fn xor_bytes(a: &[u8], b: &[u8]) -> Vec<u8> {
+    // 确保两个向量的长度相同
+    assert_eq!(a.len(), b.len());
+    let mut result = Vec::with_capacity(a.len());
+    for i in 0..a.len() {
+        result.push(a[i] ^ b[i]);
+    }
+    result
+}
+
 #[inline]
 pub fn kdf(z: &[u8], klen: usize) -> Vec<u8> {
     let mut ct = 0x00000001u32;
@@ -270,12 +280,12 @@ mod test_operation {
             "F9B7213BAF82D65BEE265948D19C17ABD2AAB97FD34EC1203722755292130B08",
             16,
         )
-            .unwrap();
+        .unwrap();
         let b1 = BigUint::from_str_radix(
             "54806C11D8806141F1DD2C190F5E93C4597B6027B441A01F85AEF3D078640C98",
             16,
         )
-            .unwrap();
+        .unwrap();
 
         let (r, c) = add_raw_u64(&a, &b);
         println!("sum r={:?}", r);

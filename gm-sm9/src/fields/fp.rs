@@ -108,15 +108,15 @@ pub(crate) fn fp_pow(a: &Fp, e: &U256) -> Fp {
     r
 }
 
-pub(crate) fn to_mont(a: &Fp) -> Fp {
+pub fn to_mont(a: &Fp) -> Fp {
     mont_mul(a, &SM9_MODP_2E512)
 }
 
-pub(crate) fn from_mont(a: &Fp) -> Fp {
+pub fn from_mont(a: &Fp) -> Fp {
     mont_mul(a, &SM9_ONE)
 }
 
-pub(crate) fn fp_to_bytes(a: &Fp) -> [u8; 32] {
+pub fn fp_to_bytes(a: &Fp) -> Vec<u8> {
     let t = from_mont(a);
     u256_to_be_bytes(&t)
 }
@@ -127,7 +127,7 @@ pub(crate) fn fp_from_bytes(buf: &[u8; 32]) -> Fp {
     t
 }
 
-pub(crate) fn mont_mul(a: &Fp, b: &Fp) -> Fp {
+pub fn mont_mul(a: &Fp, b: &Fp) -> Fp {
     let mut r = [0u64; 4];
 
     let mut z = [0u64; 8];

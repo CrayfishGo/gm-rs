@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 use std::ops::{Add, Mul, MulAssign, Neg, Sub};
 
-pub(crate) mod fp;
+pub mod fp;
 pub(crate) mod fp12;
 pub(crate) mod fp2;
 pub(crate) mod fp4;
