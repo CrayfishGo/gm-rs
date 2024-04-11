@@ -1,6 +1,6 @@
 [package]
 name = "gm-sm2"
-version = "0.12.2"
+version = "0.13.0"
 edition = "2021"
 
 description = "A Rust Implementation of China's Standards of Encryption Algorithms SM2"
@@ -47,6 +47,3 @@ optional = true
 [features]
 default = ["sec1"]
 
-[[bench]]
-name = "sm2"
-harness = false

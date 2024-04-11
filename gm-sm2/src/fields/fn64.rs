@@ -1,12 +1,10 @@
-use rand::RngCore;
-
 use crate::u256::{
-    u256_add, u256_cmp, u256_from_be_bytes, u256_mul, u256_sub, u512_add, SM2_ONE, U256,
+    SM2_ONE, U256, u256_add, u256_cmp, u256_mul, u256_sub, u512_add,
 };
 
 ///
 /// n =  0xfffffffeffffffffffffffffffffffff7203df6b21c6052b53bbf40939d54123
-const SM2_N: U256 = [
+pub const SM2_N: U256 = [
     0x53bbf40939d54123,
     0x7203df6b21c6052b,
     0xffffffffffffffff,
@@ -14,57 +12,34 @@ const SM2_N: U256 = [
 ];
 
 /// 2^256 - n  =   0x10000000000000000000000008dfc2094de39fad4ac440bf6c62abedd
-const SM2_N_NEG: U256 = [
+pub const SM2_N_NEG: U256 = [
     0xac440bf6c62abedd,
     0x8dfc2094de39fad4,
     0x0000000000000000,
     0x0000000100000000,
 ];
 
-/// N - 1
-const SM2_N_MINUS_ONE: U256 = [
-    0x53bbf40939d54122,
-    0x7203df6b21c6052b,
-    0xffffffffffffffff,
-    0xfffffffeffffffff,
-];
-
 /// N - 2
-const SM2_N_MINUS_TWO: U256 = [
+pub const SM2_N_MINUS_TWO: U256 = [
     0x53bbf40939d54121,
     0x7203df6b21c6052b,
     0xffffffffffffffff,
     0xfffffffeffffffff,
 ];
 
-const SM2_N_PRIME: U256 = [
+pub const SM2_N_PRIME: U256 = [
     0x327f9e8872350975,
     0xdf1e8d34fc8319a5,
     0x2b0068d3b08941d4,
     0x6f39132f82e4c7bc,
 ];
 
-const SM2_MOD_N_2E512: U256 = [
+pub const SM2_MOD_N_2E512: U256 = [
     0x901192af7c114f20,
     0x3464504ade6fa2fa,
     0x620fc84c3affe0d4,
     0x1eb5e412a22b3d3b,
 ];
-
-#[inline(always)]
-pub fn fn_random_u256() -> U256 {
-    let mut rng = rand::thread_rng();
-    let mut buf: [u8; 32] = [0; 32];
-    let mut ret;
-    loop {
-        rng.fill_bytes(&mut buf[..]);
-        ret = u256_from_be_bytes(&buf);
-        if ret < SM2_N_MINUS_ONE && ret != [0, 0, 0, 0] {
-            break;
-        }
-    }
-    ret
-}
 
 pub fn fn_add(a: &U256, b: &U256) -> U256 {
     let (r, c) = u256_add(a, b);
@@ -86,11 +61,11 @@ pub fn fn_sub(a: &U256, b: &U256) -> U256 {
     r
 }
 
-fn to_mont(a: &U256) -> U256 {
+pub fn to_mont(a: &U256) -> U256 {
     mont_mul(a, &SM2_MOD_N_2E512)
 }
 
-fn from_mont(a: &U256) -> U256 {
+pub fn from_mont(a: &U256) -> U256 {
     mont_mul(a, &SM2_ONE)
 }
 
@@ -161,14 +136,11 @@ pub fn fn_inv(a: &U256) -> U256 {
     r
 }
 
-pub fn fn_from_bytes(buf: &[u8; 32]) -> U256 {
-    u256_from_be_bytes(buf)
-}
-
 #[cfg(test)]
 mod test_mod_operation {
-    use crate::fields::fn64::{fn_add, fn_mul};
     use num_bigint::BigUint;
+
+    use crate::fields::fn64::fn_mul;
 
     #[test]
     fn test_mod_op() {

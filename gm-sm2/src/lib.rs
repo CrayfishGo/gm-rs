@@ -5,17 +5,13 @@ use pkcs8::spki::AlgorithmIdentifier;
 
 pub mod error;
 pub mod exchange;
-pub(crate) mod formulas;
 pub mod key;
-mod macros;
-pub(crate) mod operation;
 pub mod p256_ecc;
-pub mod p256_field;
-pub mod p256_pre_table;
 pub mod util;
 pub mod pkcs;
 pub mod u256;
 pub(crate) mod fields;
+pub(crate) mod sm2p256_table;
 
 /// Fp 的加法，减法，乘法并不是简单的四则运算。其运算结果的值必须在Fp的有限域中，这样保证椭圆曲线变成离散的点
 ///
@@ -128,12 +124,14 @@ mod test_sm2 {
 
     #[test]
     fn test_sign_verify_with_special_key() {
-        let msg = "hello，你好啊".as_bytes();
+        let msg = b"hello world";
         let public_key = "048626c62a8582c639cb3c87b59118713a519988c5f6497f91dd672abbdaaed0420ea7bc2cd03a7c938adc42b450549d312bec823b74cf22cf57c63cebd011c595";
         let private_key = "eb20009ffbffc90aeeb288ca7d782c722332d1d16a206cafec7dd6c64e6fc525";
         let pk = Sm2PublicKey::from_hex_string(public_key).unwrap();
         let sk = Sm2PrivateKey::from_hex_string(private_key).unwrap();
         let signature = sk.sign(None, msg).unwrap();
+        println!("r = {:?}", &signature[..32]); // [219, 173, 217, 137, 244, 217, 236, 248, 193, 32, 248, 249, 198, 224, 105, 110, 13, 27, 182, 83, 253, 160, 229, 228, 224, 131, 255, 153, 7, 8, 62, 125]
+        println!("s = {:?}", &signature[32..]); // [59, 88, 113, 171, 98, 2, 161, 21, 92, 251, 192, 204, 182, 109, 230, 12, 135, 138, 251, 163, 101, 45, 223, 117, 176, 11, 151, 210, 228, 140, 33, 16]
         pk.verify(None, msg, &signature).unwrap();
     }
 

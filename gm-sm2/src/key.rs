@@ -1,13 +1,15 @@
 use hex::{FromHexError, ToHex};
 use num_bigint::BigUint;
-use num_traits::{FromPrimitive, One, Zero};
 
 use gm_sm3::sm3_hash;
 
 use crate::error::{Sm2Error, Sm2Result};
-use crate::p256_ecc::{Point, P256C_PARAMS};
-use crate::util::{compute_za, kdf, random_uint, xor_bytes, DEFAULT_ID};
-use crate::{p256_ecc, FeOperation};
+use crate::fields::FieldModOperation;
+use crate::fields::fn64::{fn_add, fn_mul, fn_pow, fn_sub, SM2_N, SM2_N_MINUS_TWO};
+use crate::fields::fp64::{from_mont, random_u256};
+use crate::p256_ecc::{g_mul, Point};
+use crate::u256::{SM2_ONE, U256, u256_add, u256_cmp, u256_from_be_bytes};
+use crate::util::{compute_za, DEFAULT_ID, kdf, xor_bytes};
 
 pub enum Sm2Model {
     C1C2C3,
@@ -16,7 +18,7 @@ pub enum Sm2Model {
 
 #[derive(Debug, Clone, Copy)]
 pub struct Sm2PublicKey {
-    point: Point,
+    pub point: Point,
 }
 
 impl Sm2PublicKey {
@@ -63,18 +65,18 @@ impl Sm2PublicKey {
     pub fn encrypt(&self, msg: &[u8], compressed: bool, model: Sm2Model) -> Sm2Result<Vec<u8>> {
         loop {
             let klen = msg.len();
-            let k = random_uint();
-            let c1_p = p256_ecc::g_mul(&k);
+            let k = random_u256();
+            let c1_p = g_mul(&k);
             let c1_p = c1_p.to_affine_point(); // 根据加密算法，z坐标会被丢弃，为保证解密还原回来的坐标在曲线上，则必须转换坐标系到 affine 坐标系
 
-            let s_p = p256_ecc::scalar_mul(&P256C_PARAMS.h, &self.point);
+            let s_p = self.point.scalar_mul(&SM2_ONE);
             if s_p.is_zero() {
                 return Err(Sm2Error::ZeroPoint);
             }
 
-            let c2_p = p256_ecc::scalar_mul(&k, &self.point).to_affine_point();
-            let x2_bytes = c2_p.x.to_bytes_be();
-            let y2_bytes = c2_p.y.to_bytes_be();
+            let c2_p = self.point.scalar_mul(&k).to_affine_point();
+            let x2_bytes = from_mont(&c2_p.x).to_byte_be();
+            let y2_bytes = from_mont(&c2_p.y).to_byte_be();
             let mut c2_append = vec![];
             c2_append.extend_from_slice(&x2_bytes);
             c2_append.extend_from_slice(&y2_bytes);
@@ -114,39 +116,35 @@ impl Sm2PublicKey {
 
     pub fn verify(&self, id: Option<&'static str>, msg: &[u8], sig: &[u8]) -> Sm2Result<()> {
         let id = id.unwrap_or_else(|| DEFAULT_ID);
-        let mut digest = compute_za(id, self)?;
+        let mut digest = compute_za(id, &self.point)?;
         digest = sm3_hash(&[digest.to_vec(), msg.to_vec()].concat());
-        self.verify_raw(&digest[..], self, sig)
+        self.verify_raw(&digest[..], &self.point, sig)
     }
 
-    fn verify_raw(&self, digest: &[u8], pk: &Sm2PublicKey, sig: &[u8]) -> Sm2Result<()> {
+    fn verify_raw(&self, digest: &[u8], pk: &Point, sig: &[u8]) -> Sm2Result<()> {
         if digest.len() != 32 {
             return Err(Sm2Error::InvalidDigestLen);
         }
-        let n = &P256C_PARAMS.n;
-        let r = &BigUint::from_bytes_be(&sig[..32]);
-        let s = &BigUint::from_bytes_be(&sig[32..]);
+        let n = &SM2_N;
+        let r = &u256_from_be_bytes(&sig[..32]);
+        let s = &u256_from_be_bytes(&sig[32..]);
         if r.is_zero() || s.is_zero() {
             return Err(Sm2Error::ZeroSig);
         }
-
-        if r >= n || s >= n {
+        if u256_cmp(r, n) >= 0 || u256_cmp(s, n) >= 0 {
             return Err(Sm2Error::InvalidDigest);
         }
-
-        let t = s.mod_add(r, n);
+        let t = fn_add(&s, &r);
         if t.is_zero() {
             return Err(Sm2Error::InvalidDigest);
         }
-
-        let s_g = p256_ecc::g_mul(&s);
-        let t_p = p256_ecc::scalar_mul(&t, &pk.value());
-
-        let p = s_g.add(&t_p).to_affine_point();
-        let x1 = BigUint::from_bytes_be(&p.x.to_bytes_be());
-        let e = BigUint::from_bytes_be(digest);
-        let r1 = x1.mod_add(&e, n);
-        return if &r1 == r {
+        let s_g = g_mul(&s);
+        let t_p = pk.scalar_mul(&t);
+        let p = s_g.point_add(&t_p).to_affine_point();
+        let x1 = u256_from_be_bytes(&from_mont(&p.x).to_byte_be());
+        let e = u256_from_be_bytes(&digest);
+        let r1 = fn_add(&x1, &e);
+        return if u256_cmp(r, &r1) == 0 {
             Ok(())
         } else {
             Err(Sm2Error::InvalidDigest)
@@ -175,7 +173,7 @@ impl Sm2PublicKey {
 
 #[derive(Debug, Clone)]
 pub struct Sm2PrivateKey {
-    pub d: BigUint,
+    pub d: U256,
     pub public_key: Sm2PublicKey,
 }
 
@@ -196,51 +194,49 @@ impl AsRef<Sm2PublicKey> for Sm2PrivateKey {
 
 impl Sm2PrivateKey {
     pub fn new(sk: &[u8]) -> Sm2Result<Self> {
-        let d = BigUint::from_bytes_be(sk);
+        let d = u256_from_be_bytes(sk);
         let public_key = public_from_private(&d)?;
         let private_key = Self { d, public_key };
-
         Ok(private_key)
     }
 
     #[inline]
     pub fn to_bytes_be(&self) -> Vec<u8> {
-        self.d.to_bytes_be()
+        self.d.to_byte_be()
     }
 
     /// Sign the given digest.
     pub fn sign(&self, id: Option<&'static str>, msg: &[u8]) -> Sm2Result<Vec<u8>> {
         let id = id.unwrap_or_else(|| DEFAULT_ID);
-        let mut digest = compute_za(id, &self.public_key)?;
+        let mut digest = compute_za(id, &self.public_key.point)?;
         digest = sm3_hash(&[digest.to_vec(), msg.to_vec()].concat());
         self.sign_raw(&digest[..], &self.d)
     }
 
-    fn sign_raw(&self, digest: &[u8], sk: &BigUint) -> Sm2Result<Vec<u8>> {
+    fn sign_raw(&self, digest: &[u8], sk: &U256) -> Sm2Result<Vec<u8>> {
         if digest.len() != 32 {
             return Err(Sm2Error::InvalidDigestLen);
         }
-        let e = BigUint::from_bytes_be(&digest);
-        let n = &P256C_PARAMS.n;
-        let s1 = &(BigUint::one() + sk).modpow(&(n - BigUint::from_u32(2).unwrap()), n);
+        let e = u256_from_be_bytes(&digest);
+        let n = &SM2_N;
+        let s1 = fn_pow(&u256_add(&SM2_ONE, &sk).0, &SM2_N_MINUS_TWO);
         loop {
-            let k = random_uint();
-            let p_x = p256_ecc::g_mul(&k).to_affine_point();
-            let x1 = BigUint::from_bytes_be(&p_x.x.to_bytes_be());
-            let r = e.mod_add(&x1, n);
-            if r.is_zero() || &r + &k == *n {
+            let k = random_u256();
+            let p_x = g_mul(&k).to_affine_point();
+            let x1 = u256_from_be_bytes(&from_mont(&p_x.x).to_byte_be());
+            let r = fn_add(&e, &x1);
+            if r.is_zero() || u256_add(&r, &k).0 == *n {
                 continue;
             }
-
-            let s2_1 = r.mod_mul(&sk, n);
-            let s2 = k.mod_sub(&s2_1, n);
-            let s = s1.mod_mul(&s2, n);
+            let s2_1 = fn_mul(&r, &sk);
+            let s2 = fn_sub(&k, &s2_1);
+            let s = fn_mul(&s1, &s2);
             if s.is_zero() {
                 continue;
             }
             let mut sig: Vec<u8> = vec![];
-            sig.extend_from_slice(&r.to_bytes_be());
-            sig.extend_from_slice(&s.to_bytes_be());
+            sig.extend_from_slice(&r.to_byte_be());
+            sig.extend_from_slice(&s.to_byte_be());
             return Ok(sig);
         }
     }
@@ -300,14 +296,14 @@ impl Sm2PrivateKey {
             return Err(Sm2Error::CheckPointErr);
         }
 
-        let s_point = p256_ecc::scalar_mul(&P256C_PARAMS.h, &c1_point);
+        let s_point = c1_point.scalar_mul(&SM2_ONE);
         if s_point.is_zero() {
             return Err(Sm2Error::ZeroPoint);
         }
 
-        let c2_point = p256_ecc::scalar_mul(&self.d, &c1_point).to_affine_point();
-        let x2_bytes = c2_point.x.to_bytes_be();
-        let y2_bytes = c2_point.y.to_bytes_be();
+        let c2_point = c1_point.scalar_mul(&self.d).to_affine_point();
+        let x2_bytes = from_mont(&c2_point.x).to_byte_be();
+        let y2_bytes = from_mont(&c2_point.y).to_byte_be();
         let mut prepend: Vec<u8> = vec![];
         prepend.extend_from_slice(&x2_bytes);
         prepend.extend_from_slice(&y2_bytes);
@@ -342,7 +338,7 @@ impl Sm2PrivateKey {
     }
 
     pub fn to_hex_string(&self) -> String {
-        let bytes = self.d.to_bytes_be();
+        let bytes = self.d.to_byte_be();
         bytes.encode_hex::<String>()
     }
 
@@ -367,14 +363,14 @@ impl Sm2PrivateKey {
 
 /// generate key pair
 pub fn gen_keypair() -> Sm2Result<(Sm2PublicKey, Sm2PrivateKey)> {
-    let d = random_uint();
+    let d = random_u256();
     let pk = public_from_private(&d)?;
     let sk = Sm2PrivateKey { d, public_key: pk };
     Ok((pk, sk))
 }
 
-fn public_from_private(sk: &BigUint) -> Sm2Result<Sm2PublicKey> {
-    let p = p256_ecc::g_mul(&sk);
+fn public_from_private(sk: &U256) -> Sm2Result<Sm2PublicKey> {
+    let p = g_mul(&sk);
     if p.is_valid() {
         Ok(Sm2PublicKey { point: p })
     } else {

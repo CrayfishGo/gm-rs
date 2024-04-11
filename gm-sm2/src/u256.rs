@@ -1,10 +1,11 @@
+use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use std::io::Cursor;
+
 pub type U256 = [u64; 4];
 pub type U512 = [u64; 8];
 
 pub(crate) const SM2_ZERO: U256 = [0, 0, 0, 0];
 pub(crate) const SM2_ONE: U256 = [1, 0, 0, 0];
-pub(crate) const SM2_TWO: U256 = [2, 0, 0, 0];
-pub(crate) const SM2_FIVE: U256 = [5, 0, 0, 0];
 
 #[inline(always)]
 pub const fn u256_add(a: &U256, b: &U256) -> (U256, bool) {
@@ -92,33 +93,12 @@ pub const fn u512_sub(a: &U512, b: &U512) -> (U512, bool) {
     (r, borrow)
 }
 
-#[inline(always)]
-pub const fn u256_cmp(a: &U256, b: &U256) -> i32 {
-    if a[3] > b[3] {
-        return 1;
+pub fn u256_bits_and(a: &U256, b: &U256) -> U256 {
+    let mut result: [u64; 4] = [0; 4];
+    for i in 0..a.len() {
+        result[i] = a[i] & b[i];
     }
-    if a[3] < b[3] {
-        return -1;
-    }
-    if a[2] > b[2] {
-        return 1;
-    }
-    if a[2] < b[2] {
-        return -1;
-    }
-    if a[1] > b[1] {
-        return 1;
-    }
-    if a[1] < b[1] {
-        return -1;
-    }
-    if a[0] > b[0] {
-        return 1;
-    }
-    if a[0] < b[0] {
-        return -1;
-    }
-    return 0;
+    result
 }
 
 #[inline(always)]
@@ -153,25 +133,52 @@ pub fn u256_mul(a: &U256, b: &U256) -> U512 {
 }
 
 #[inline(always)]
-pub fn u256_to_be_bytes(a: &U256) -> [u8; 32] {
-    let mut out = [0; 32];
-    out[0..8].copy_from_slice(&a[3].to_be_bytes());
-    out[8..16].copy_from_slice(&a[2].to_be_bytes());
-    out[16..24].copy_from_slice(&a[1].to_be_bytes());
-    out[24..32].copy_from_slice(&a[0].to_be_bytes());
-    out
+pub const fn u256_cmp(a: &U256, b: &U256) -> i32 {
+    if a[3] > b[3] {
+        return 1;
+    }
+    if a[3] < b[3] {
+        return -1;
+    }
+    if a[2] > b[2] {
+        return 1;
+    }
+    if a[2] < b[2] {
+        return -1;
+    }
+    if a[1] > b[1] {
+        return 1;
+    }
+    if a[1] < b[1] {
+        return -1;
+    }
+    if a[0] > b[0] {
+        return 1;
+    }
+    if a[0] < b[0] {
+        return -1;
+    }
+    return 0;
+}
+
+#[inline(always)]
+pub fn u256_to_be_bytes(a: &U256) -> Vec<u8> {
+    let mut ret: Vec<u8> = Vec::new();
+    for i in (0..4).rev() {
+        ret.write_u64::<BigEndian>(a[i]).unwrap();
+    }
+    ret
 }
 
 #[inline(always)]
 pub fn u256_from_be_bytes(input: &[u8]) -> U256 {
-    let mut r: U256 = [0_u64; 4];
-    r[3] = u64::from_be_bytes(input[0..8].try_into().unwrap());
-    r[2] = u64::from_be_bytes(input[8..16].try_into().unwrap());
-    r[1] = u64::from_be_bytes(input[16..24].try_into().unwrap());
-    r[0] = u64::from_be_bytes(input[24..32].try_into().unwrap());
-    r
+    let mut elem = [0, 0, 0, 0];
+    let mut c = Cursor::new(input);
+    for i in (0..4).rev() {
+        elem[i] = c.read_u64::<BigEndian>().unwrap();
+    }
+    elem
 }
-
 
 #[cfg(test)]
 mod test_operation {
@@ -205,13 +212,13 @@ mod test_operation {
                 .unwrap(),
         );
 
-        let (mut r, c) = u256_add(&a, &b);
+        let (mut r, _c) = u256_add(&a, &b);
         r.reverse();
         let mut sum = (&a1 + &b1).to_u64_digits();
         sum.reverse();
         assert_eq!(r, *sum);
 
-        let (mut r, c) = u256_sub(&a, &b);
+        let (mut r, _c) = u256_sub(&a, &b);
         r.reverse();
         let mut sub = (&a1 - &b1).to_u64_digits();
         sub.reverse();
