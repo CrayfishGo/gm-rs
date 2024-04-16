@@ -1,5 +1,5 @@
 use crate::error::{Sm2Error, Sm2Result};
-use crate::fields::fp64::{fp_sqrt, from_mont, to_mont, SM2_P};
+use crate::fields::fp64::{fp_sqrt, fp_from_mont, fp_to_mont, SM2_P};
 use crate::fields::FieldModOperation;
 use crate::sm2p256_table::SM2P256_PRECOMPUTED;
 use crate::u256::{u256_from_be_bytes, SM2_ZERO, U256};
@@ -69,8 +69,8 @@ impl Point {
 
     pub fn to_byte_be(&self, compress: bool) -> Vec<u8> {
         let p_affine = self.to_affine_point();
-        let mut x_vec = from_mont(&p_affine.x).to_byte_be();
-        let mut y_vec = from_mont(&p_affine.y).to_byte_be();
+        let mut x_vec = fp_from_mont(&p_affine.x).to_byte_be();
+        let mut y_vec = fp_from_mont(&p_affine.y).to_byte_be();
         let mut ret: Vec<u8> = Vec::new();
         if compress {
             if y_vec[y_vec.len() - 1] & 0x01 == 0 {
@@ -100,7 +100,7 @@ impl Point {
             } else {
                 y_q = 1
             }
-            let x = to_mont(&U256::from_byte_be(&b[1..]));
+            let x = fp_to_mont(&U256::from_byte_be(&b[1..]));
             let xxx = x.fp_mul(&x).fp_mul(&x);
             let ax = x.fp_mul(&crate::fields::fp64::SM2_MODP_MONT_A);
             let yy = xxx
@@ -108,7 +108,7 @@ impl Point {
                 .fp_add(&crate::fields::fp64::SM2_MODP_MONT_B);
 
             let mut y = fp_sqrt(&yy)?;
-            let y_vec = from_mont(&y).to_byte_be();
+            let y_vec = fp_from_mont(&y).to_byte_be();
             if y_vec[y_vec.len() - 1] & 0x01 != y_q {
                 y = SM2_P.fp_sub(&y);
             }
@@ -123,8 +123,8 @@ impl Point {
             if b.len() != 65 {
                 return Err(Sm2Error::InvalidPublic);
             }
-            let x = to_mont(&u256_from_be_bytes(&b[1..33]));
-            let y = to_mont(&u256_from_be_bytes(&b[33..65]));
+            let x = fp_to_mont(&u256_from_be_bytes(&b[1..33]));
+            let y = fp_to_mont(&u256_from_be_bytes(&b[33..65]));
             Ok(Point {
                 x,
                 y,
@@ -289,7 +289,7 @@ pub(crate) fn to_jacobi(x: &U256, y: &U256) -> Point {
 
 #[cfg(test)]
 mod test {
-    use crate::fields::fp64::to_mont;
+    use crate::fields::fp64::fp_to_mont;
     use crate::p256_ecc::{g_mul, to_jacobi, Point};
     use crate::u256::u256_from_be_bytes;
 
@@ -390,8 +390,8 @@ mod test {
             0x59bdcee36b692153,
             0xbc3736a2f4f6779c,
         ];
-        let mont_g_x = to_mont(&g_x);
-        let mont_g_y = to_mont(&g_y);
+        let mont_g_x = fp_to_mont(&g_x);
+        let mont_g_y = fp_to_mont(&g_y);
         let pro_mont_point_g = to_jacobi(&mont_g_x, &mont_g_y);
 
         let r = pro_mont_point_g.scalar_mul(scalar);

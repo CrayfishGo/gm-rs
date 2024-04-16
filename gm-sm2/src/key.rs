@@ -6,7 +6,7 @@ use gm_sm3::sm3_hash;
 use crate::error::{Sm2Error, Sm2Result};
 use crate::fields::FieldModOperation;
 use crate::fields::fn64::{fn_add, fn_mul, fn_pow, fn_sub, SM2_N, SM2_N_MINUS_TWO};
-use crate::fields::fp64::{from_mont, random_u256};
+use crate::fields::fp64::{fp_from_mont, random_u256};
 use crate::p256_ecc::{g_mul, Point};
 use crate::u256::{SM2_ONE, U256, u256_add, u256_cmp, u256_from_be_bytes};
 use crate::util::{compute_za, DEFAULT_ID, kdf, xor_bytes};
@@ -75,8 +75,8 @@ impl Sm2PublicKey {
             }
 
             let c2_p = self.point.scalar_mul(&k).to_affine_point();
-            let x2_bytes = from_mont(&c2_p.x).to_byte_be();
-            let y2_bytes = from_mont(&c2_p.y).to_byte_be();
+            let x2_bytes = fp_from_mont(&c2_p.x).to_byte_be();
+            let y2_bytes = fp_from_mont(&c2_p.y).to_byte_be();
             let mut c2_append = vec![];
             c2_append.extend_from_slice(&x2_bytes);
             c2_append.extend_from_slice(&y2_bytes);
@@ -141,7 +141,7 @@ impl Sm2PublicKey {
         let s_g = g_mul(&s);
         let t_p = pk.scalar_mul(&t);
         let p = s_g.point_add(&t_p).to_affine_point();
-        let x1 = u256_from_be_bytes(&from_mont(&p.x).to_byte_be());
+        let x1 = u256_from_be_bytes(&fp_from_mont(&p.x).to_byte_be());
         let e = u256_from_be_bytes(&digest);
         let r1 = fn_add(&x1, &e);
         return if u256_cmp(r, &r1) == 0 {
@@ -223,7 +223,7 @@ impl Sm2PrivateKey {
         loop {
             let k = random_u256();
             let p_x = g_mul(&k).to_affine_point();
-            let x1 = u256_from_be_bytes(&from_mont(&p_x.x).to_byte_be());
+            let x1 = u256_from_be_bytes(&fp_from_mont(&p_x.x).to_byte_be());
             let r = fn_add(&e, &x1);
             if r.is_zero() || u256_add(&r, &k).0 == *n {
                 continue;
@@ -302,8 +302,8 @@ impl Sm2PrivateKey {
         }
 
         let c2_point = c1_point.scalar_mul(&self.d).to_affine_point();
-        let x2_bytes = from_mont(&c2_point.x).to_byte_be();
-        let y2_bytes = from_mont(&c2_point.y).to_byte_be();
+        let x2_bytes = fp_from_mont(&c2_point.x).to_byte_be();
+        let y2_bytes = fp_from_mont(&c2_point.y).to_byte_be();
         let mut prepend: Vec<u8> = vec![];
         prepend.extend_from_slice(&x2_bytes);
         prepend.extend_from_slice(&y2_bytes);

@@ -61,19 +61,19 @@ pub fn fn_sub(a: &U256, b: &U256) -> U256 {
     r
 }
 
-pub fn to_mont(a: &U256) -> U256 {
+pub fn fn_to_mont(a: &U256) -> U256 {
     mont_mul(a, &SM2_MOD_N_2E512)
 }
 
-pub fn from_mont(a: &U256) -> U256 {
+pub fn fn_from_mont(a: &U256) -> U256 {
     mont_mul(a, &SM2_ONE)
 }
 
 pub fn fn_mul(a: &U256, b: &U256) -> U256 {
-    let mont_a = to_mont(a);
-    let mont_b = to_mont(b);
+    let mont_a = fn_to_mont(a);
+    let mont_b = fn_to_mont(b);
     let mut r = mont_mul(&mont_a, &mont_b);
-    r = from_mont(&r);
+    r = fn_from_mont(&r);
     r
 }
 
@@ -112,7 +112,7 @@ fn mont_mul(a: &U256, b: &U256) -> U256 {
 }
 
 pub fn fn_pow(a: &U256, e: &U256) -> U256 {
-    let mont_a = to_mont(a);
+    let mont_a = fn_to_mont(a);
     let mut r = SM2_N_NEG;
     let mut w = 0u64;
     for i in (0..4).rev() {
@@ -125,14 +125,14 @@ pub fn fn_pow(a: &U256, e: &U256) -> U256 {
             w <<= 1;
         }
     }
-    r = from_mont(&r);
+    r = fn_from_mont(&r);
     r
 }
 
 pub fn fn_inv(a: &U256) -> U256 {
-    let mont_a = to_mont(a);
+    let mont_a = fn_to_mont(a);
     let mut r = fn_pow(&mont_a, &SM2_N_MINUS_TWO);
-    r = from_mont(&r);
+    r = fn_from_mont(&r);
     r
 }
 

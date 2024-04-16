@@ -3,7 +3,7 @@ use gm_sm3::sm3_hash;
 
 use crate::error::{Sm2Error, Sm2Result};
 use crate::fields::FieldModOperation;
-use crate::fields::fp64::{from_mont, SM2_G_X, SM2_G_Y, SM2_MODP_MONT_A, SM2_MODP_MONT_B};
+use crate::fields::fp64::{fp_from_mont, SM2_G_X, SM2_G_Y, SM2_MODP_MONT_A, SM2_MODP_MONT_B};
 use crate::p256_ecc::Point;
 
 pub(crate) const DEFAULT_ID: &'static str = "1234567812345678";
@@ -24,14 +24,14 @@ pub fn compute_za(id: &str, pk: &Point) -> Sm2Result<[u8; 32]> {
         prepend.push(c);
     }
 
-    prepend.extend_from_slice(&from_mont(&SM2_MODP_MONT_A).to_byte_be());
-    prepend.extend_from_slice(&from_mont(&SM2_MODP_MONT_B).to_byte_be());
+    prepend.extend_from_slice(&fp_from_mont(&SM2_MODP_MONT_A).to_byte_be());
+    prepend.extend_from_slice(&fp_from_mont(&SM2_MODP_MONT_B).to_byte_be());
     prepend.extend_from_slice(&SM2_G_X.to_byte_be());
     prepend.extend_from_slice(&SM2_G_Y.to_byte_be());
 
     let pk_affine = pk.to_affine_point();
-    prepend.extend_from_slice(&from_mont(&pk_affine.x).to_byte_be());
-    prepend.extend_from_slice(&from_mont(&pk_affine.y).to_byte_be());
+    prepend.extend_from_slice(&fp_from_mont(&pk_affine.x).to_byte_be());
+    prepend.extend_from_slice(&fp_from_mont(&pk_affine.y).to_byte_be());
 
     Ok(sm3_hash(&prepend))
 }

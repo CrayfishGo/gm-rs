@@ -130,8 +130,8 @@ mod test_sm2 {
         let pk = Sm2PublicKey::from_hex_string(public_key).unwrap();
         let sk = Sm2PrivateKey::from_hex_string(private_key).unwrap();
         let signature = sk.sign(None, msg).unwrap();
-        println!("r = {:?}", &signature[..32]); // [219, 173, 217, 137, 244, 217, 236, 248, 193, 32, 248, 249, 198, 224, 105, 110, 13, 27, 182, 83, 253, 160, 229, 228, 224, 131, 255, 153, 7, 8, 62, 125]
-        println!("s = {:?}", &signature[32..]); // [59, 88, 113, 171, 98, 2, 161, 21, 92, 251, 192, 204, 182, 109, 230, 12, 135, 138, 251, 163, 101, 45, 223, 117, 176, 11, 151, 210, 228, 140, 33, 16]
+        println!("r = {:?}", &signature[..32]);
+        println!("s = {:?}", &signature[32..]);
         pk.verify(None, msg, &signature).unwrap();
     }
 

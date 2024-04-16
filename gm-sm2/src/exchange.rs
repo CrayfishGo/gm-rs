@@ -5,7 +5,7 @@ use gm_sm3::sm3_hash;
 use crate::error::{Sm2Error, Sm2Result};
 use crate::fields::FieldModOperation;
 use crate::fields::fn64::{fn_add, fn_mul};
-use crate::fields::fp64::{from_mont, random_u256};
+use crate::fields::fp64::{fp_from_mont, random_u256};
 use crate::key::{gen_keypair, Sm2PrivateKey, Sm2PublicKey};
 use crate::p256_ecc::{g_mul, Point};
 use crate::u256::{SM2_ONE, U256, u256_add, u256_bits_and, u256_sub};
@@ -94,8 +94,8 @@ impl Exchange {
         self.r = Some(r2);
         self.r_point = Some(r2_point);
         let r2_point_affine = r2_point.to_affine_point();
-        let x2 = from_mont(&r2_point_affine.x);
-        let y2 = from_mont(&r2_point_affine.y);
+        let x2 = fp_from_mont(&r2_point_affine.x);
+        let y2 = fp_from_mont(&r2_point_affine.y);
         let x2_b = u256_add(&pow, &u256_bits_and(&x2, &u256_sub(&pow, &SM2_ONE).0)).0;
         let t2 = fn_add(
             &self.sk.d,
@@ -106,8 +106,8 @@ impl Exchange {
         );
 
         let ra_point_affine = ra_point.to_affine_point();
-        let x1 = from_mont(&ra_point_affine.x);
-        let y1 = from_mont(&ra_point_affine.y);
+        let x1 = fp_from_mont(&ra_point_affine.x);
+        let y1 = fp_from_mont(&ra_point_affine.y);
         let x1_a = u256_add(&pow, &u256_bits_and(&x1, &u256_sub(&pow, &SM2_ONE).0)).0;
 
         let p = self
@@ -121,8 +121,8 @@ impl Exchange {
         self.v = Some(v_point);
 
         let v_affine_p = v_point.to_affine_point();
-        let xv_bytes = from_mont(&v_affine_p.x).to_byte_be();
-        let yv_bytes = from_mont(&v_affine_p.y).to_byte_be();
+        let xv_bytes = fp_from_mont(&v_affine_p.x).to_byte_be();
+        let yv_bytes = fp_from_mont(&v_affine_p.y).to_byte_be();
 
         let mut prepend = Vec::new();
         prepend.extend_from_slice(&xv_bytes);
@@ -164,8 +164,8 @@ impl Exchange {
         ];
 
         let ra_point_affine = self.r_point.unwrap().to_affine_point();
-        let x1 = from_mont(&ra_point_affine.x);
-        let y1 = from_mont(&ra_point_affine.y);
+        let x1 = fp_from_mont(&ra_point_affine.x);
+        let y1 = fp_from_mont(&ra_point_affine.y);
         let x1_a = u256_add(&pow, &u256_bits_and(&x1, &u256_sub(&pow, &SM2_ONE).0)).0;
         let t_a = fn_add(
             &self.sk.d,
@@ -176,8 +176,8 @@ impl Exchange {
         );
 
         let rb_point_affine = rb_point.to_affine_point();
-        let x2 = from_mont(&rb_point_affine.x);
-        let y2 = from_mont(&rb_point_affine.y);
+        let x2 = fp_from_mont(&rb_point_affine.x);
+        let y2 = fp_from_mont(&rb_point_affine.y);
         let x2_b = u256_add(&pow, &u256_bits_and(&x2, &u256_sub(&pow, &SM2_ONE).0)).0;
         let p = self
             .rhs_pk
@@ -189,8 +189,8 @@ impl Exchange {
         }
 
         let u_affine_p = u_point.to_affine_point();
-        let xu_bytes = from_mont(&u_affine_p.x).to_byte_be();
-        let yu_bytes = from_mont(&u_affine_p.y).to_byte_be();
+        let xu_bytes = fp_from_mont(&u_affine_p.x).to_byte_be();
+        let yu_bytes = fp_from_mont(&u_affine_p.y).to_byte_be();
 
         let mut prepend = Vec::new();
         prepend.extend_from_slice(&xu_bytes);
@@ -231,16 +231,16 @@ impl Exchange {
     // Step4: UserA Call
     pub fn exchange_4(&self, sa: [u8; 32], ra_point: &Point) -> Sm2Result<bool> {
         let ra_point_affine = ra_point.to_affine_point();
-        let x1 = from_mont(&ra_point_affine.x);
-        let y1 = from_mont(&ra_point_affine.y);
+        let x1 = fp_from_mont(&ra_point_affine.x);
+        let y1 = fp_from_mont(&ra_point_affine.y);
 
         let r2_point_affine = self.r_point.unwrap().to_affine_point();
-        let x2 = from_mont(&r2_point_affine.x);
-        let y2 = from_mont(&r2_point_affine.y);
+        let x2 = fp_from_mont(&r2_point_affine.x);
+        let y2 = fp_from_mont(&r2_point_affine.y);
 
         let v_point_affine = self.v.unwrap().to_affine_point();
-        let xv = from_mont(&v_point_affine.x);
-        let yv = from_mont(&v_point_affine.y);
+        let xv = fp_from_mont(&v_point_affine.x);
+        let yv = fp_from_mont(&v_point_affine.y);
 
         let mut temp: Vec<u8> = Vec::new();
         temp.extend_from_slice(&xv.to_byte_be());

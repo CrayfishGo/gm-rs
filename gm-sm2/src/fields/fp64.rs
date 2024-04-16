@@ -119,11 +119,11 @@ pub fn fp_pow(a: &U256, e: &U256) -> U256 {
     r
 }
 
-pub(crate) fn to_mont(a: &U256) -> U256 {
+pub(crate) fn fp_to_mont(a: &U256) -> U256 {
     mont_mul(a, &SM2_MODP_2E512)
 }
 
-pub(crate) fn from_mont(a: &U256) -> U256 {
+pub(crate) fn fp_from_mont(a: &U256) -> U256 {
     mont_mul(a, &SM2_ONE)
 }
 
