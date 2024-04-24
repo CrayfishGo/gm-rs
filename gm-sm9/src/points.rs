@@ -1,6 +1,6 @@
 use crate::fields::fp::Fp;
 use crate::fields::FieldElement;
-use crate::u256::U256;
+use crate::u256::{sm9_u256_get_booth, SM9_ZERO, U256};
 
 #[derive(Copy, Debug, Clone)]
 pub struct Point {
@@ -136,7 +136,46 @@ impl Point {
             return rhs.clone();
         }
 
-        todo!()
+        let x1 = self.x;
+        let y1 = self.y;
+        let z1 = self.z;
+
+        let x2 = rhs.x;
+        let y2 = rhs.y;
+        let z2 = rhs.z;
+
+        let mut t1 = z1.fp_sqr();
+        let mut t2 = t1.fp_mul(&z1);
+        t1 = t1.fp_mul(&x2);
+        t2 = t2.fp_mul(&y2);
+        t1 = t1.fp_sub(&x1);
+        t2 = t2.fp_sub(&y1);
+
+        if t1 == SM9_ZERO {
+            return if t2 == SM9_ZERO {
+                rhs.point_double()
+            } else {
+                Point::zero()
+            };
+        }
+
+        let z3 = z1.fp_mul(&t1);
+        let mut t3 = t1.fp_sqr();
+        let mut t4 = t3.fp_mul(&t1);
+        t3 = t3.fp_mul(&x1);
+        t1 = t3.fp_double();
+        let mut x3 = t2.fp_sqr();
+        x3 = x3.fp_sub(&t1);
+        x3 = x3.fp_sub(&t4);
+        t3 = t3.fp_sub(&x3);
+        t3 = t3.fp_sub(&x3);
+        t4 = t4.fp_mul(&y1);
+        let y3 = t3.fp_sub(&t4);
+        Point {
+            x: x3,
+            y: y3,
+            z: z3,
+        }
     }
 
     pub fn point_sub(&self, rhs: &Self) -> Self {
@@ -161,8 +200,57 @@ impl Point {
         r
     }
 
-    pub fn point_mul(&self, k: &U256) -> Self {
-        todo!()
+    pub fn point_mul(&self, k: &[u64]) -> Self {
+        let mut pre_table = vec![];
+        for _ in 0..16 {
+            pre_table.push(Point::zero());
+        }
+        let window_size = 5u64;
+        let n = (256 + window_size - 1) / window_size;
+        pre_table[0] = *self;
+        pre_table[2 - 1] = pre_table[1 - 1].point_double();
+        pre_table[4 - 1] = pre_table[2 - 1].point_double();
+        pre_table[8 - 1] = pre_table[4 - 1].point_double();
+        pre_table[16 - 1] = pre_table[8 - 1].point_double();
+
+        pre_table[3 - 1] = pre_table[2 - 1].point_add(self);
+        pre_table[6 - 1] = pre_table[3 - 1].point_double();
+        pre_table[12 - 1] = pre_table[6 - 1].point_double();
+
+        pre_table[5 - 1] = pre_table[3 - 1].point_add(&pre_table[2 - 1]);
+        pre_table[10 - 1] = pre_table[5 - 1].point_double();
+
+        pre_table[7 - 1] = pre_table[4 - 1].point_add(&pre_table[3 - 1]);
+        pre_table[14 - 1] = pre_table[7 - 1].point_double();
+
+        pre_table[9 - 1] = pre_table[4 - 1].point_add(&pre_table[5 - 1]);
+        pre_table[11 - 1] = pre_table[6 - 1].point_add(&pre_table[5 - 1]);
+        pre_table[13 - 1] = pre_table[7 - 1].point_add(&pre_table[6 - 1]);
+        pre_table[15 - 1] = pre_table[8 - 1].point_add(&pre_table[7 - 1]);
+
+        let mut r = Point::zero();
+        let mut r_infinity = true;
+        for i in (0..n - 1).rev() {
+            let booth = sm9_u256_get_booth(k, window_size, i);
+            if r_infinity {
+                if booth != 0 {
+                    r = pre_table[(booth - 1) as usize];
+                    r_infinity = false;
+                }
+            } else {
+                r = r.point_double_x5();
+                if booth > 0 {
+                    r = r.point_add(&pre_table[(booth - 1) as usize])
+                } else if booth < 0 {
+                    r = r.point_sub(&pre_table[(-booth - 1) as usize])
+                }
+            }
+        }
+
+        if r_infinity {
+            r = Point::zero();
+        }
+        r
     }
 }
 

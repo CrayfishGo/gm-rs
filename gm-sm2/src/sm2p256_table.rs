@@ -1,5 +1,7 @@
+use crate::u256::U256;
+
 #[rustfmt::skip]
-pub static SM2P256_PRECOMPUTED: [[[u64; 4]; 510]; 32] = [
+pub static SM2P256_PRECOMPUTED: [[U256; 510]; 32] = [
     [[0x61328990f418029e, 0x3e7981eddca6c050, 0xd6a1ed99ac24c3c3, 0x91167a5ee1c13b05],
         [0xc1354e593c2d0ddd, 0xc1f5e5788d3295fa, 0x8d4cfb066e2a48f8, 0x63cd65d481d735bd],
         [0x0af037bfbc3be46a, 0x83bdc9ba2d8fa938, 0x5349d94b5788cd24, 0x0d7e9c18caa5736a],

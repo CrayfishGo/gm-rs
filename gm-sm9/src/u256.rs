@@ -1,6 +1,6 @@
-use std::io::Cursor;
-use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use crate::fields::FieldElement;
+use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use std::io::Cursor;
 
 pub type U256 = [u64; 4];
 pub type U512 = [u64; 8];
@@ -175,6 +175,23 @@ pub fn u256_from_be_bytes(input: &[u8]) -> U256 {
     elem
 }
 
+pub fn sm9_u256_get_booth(a: &[u64], window_size: u64, i: u64) -> i32 {
+    let mask = (1 << window_size) - 1;
+    let (mut n, mut j) = (0_usize, 0_usize);
+    if i == 0 {
+        return (((a[0] << 1) & mask) as i32) - ((a[0] & mask) as i32);
+    }
+
+    j = (i * window_size - 1) as usize;
+    n = j / 64;
+    j = j % 64;
+
+    let mut wbits = a[n] >> j;
+    if (64 - j) < (window_size + 1) as usize && n < 3 {
+        wbits |= a[n + 1] << (64 - j);
+    }
+    return ((wbits & mask) as i32) - (((wbits >> 1) & mask) as i32);
+}
 
 #[cfg(test)]
 mod test_operation {
@@ -227,7 +244,6 @@ mod test_operation {
         assert_eq!(r, *mul);
     }
 
-
     #[test]
     fn test_to_bytes_be() {
         let a: [u64; 4] = [
@@ -237,7 +253,10 @@ mod test_operation {
             0x85AEF3D078640C98,
         ];
 
-        let r_b = [133, 174, 243, 208, 120, 100, 12, 152, 89, 123, 96, 39, 180, 65, 160, 31, 241, 221, 44, 25, 15, 94, 147, 196, 84, 128, 108, 17, 216, 128, 97, 65];
+        let r_b = [
+            133, 174, 243, 208, 120, 100, 12, 152, 89, 123, 96, 39, 180, 65, 160, 31, 241, 221, 44,
+            25, 15, 94, 147, 196, 84, 128, 108, 17, 216, 128, 97, 65,
+        ];
 
         let ret = u256_to_be_bytes(&a);
         assert_eq!(ret, r_b);

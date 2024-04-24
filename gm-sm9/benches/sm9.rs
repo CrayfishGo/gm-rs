@@ -1,7 +1,7 @@
 use criterion::{Criterion, criterion_group, criterion_main};
 
 use gm_sm9::fields::FieldElement;
-use gm_sm9::fields::fp::{from_mont, mont_mul, to_mont};
+use gm_sm9::fields::fp::{fp_from_mont, mont_mul, fp_to_mont};
 
 fn bench_mod_add(c: &mut Criterion) {
     let mut group = c.benchmark_group("sm9");

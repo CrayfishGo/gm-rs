@@ -108,22 +108,22 @@ pub(crate) fn fp_pow(a: &Fp, e: &U256) -> Fp {
     r
 }
 
-pub fn to_mont(a: &Fp) -> Fp {
+pub fn fp_to_mont(a: &Fp) -> Fp {
     mont_mul(a, &SM9_MODP_2E512)
 }
 
-pub fn from_mont(a: &Fp) -> Fp {
+pub fn fp_from_mont(a: &Fp) -> Fp {
     mont_mul(a, &SM9_ONE)
 }
 
 pub fn fp_to_bytes(a: &Fp) -> Vec<u8> {
-    let t = from_mont(a);
+    let t = fp_from_mont(a);
     u256_to_be_bytes(&t)
 }
 
 pub(crate) fn fp_from_bytes(buf: &[u8; 32]) -> Fp {
     let mut t = u256_from_be_bytes(buf);
-    t = to_mont(&t);
+    t = fp_to_mont(&t);
     t
 }
 
@@ -168,7 +168,7 @@ impl FieldElement for Fp {
     }
 
     fn one() -> Self {
-        SM9_ONE
+        SM9_MODP_MONT_ONE
     }
 
     fn is_zero(&self) -> bool {
@@ -248,7 +248,7 @@ impl FieldElement for Fp {
 
 #[cfg(test)]
 mod test_mod_operation {
-    use crate::fields::fp::{fp_pow, from_mont, to_mont};
+    use crate::fields::fp::{fp_pow, fp_from_mont, fp_to_mont};
     use crate::fields::FieldElement;
 
     #[test]
@@ -281,46 +281,46 @@ mod test_mod_operation {
         r.reverse();
         println!("fp_sub ={:x?}", r); // 43cee97c9abed9be3efe7ffffc9d30abe1d643b9b27ea351460aabb2239d3fd4
 
-        a = to_mont(&a);
-        b = to_mont(&b);
+        a = fp_to_mont(&a);
+        b = fp_to_mont(&b);
         let mut r = a.fp_mul(&b);
-        r = from_mont(&r);
+        r = fp_from_mont(&r);
         r.reverse();
         println!("fp_mul ={:x?}", r); // 9e4d19bb5d94a47352e6f53f4116b2a71b16a1113dc789b26528ee19f46b72e0
 
         let mut r = a.fp_double();
-        r = from_mont(&r);
+        r = fp_from_mont(&r);
         r.reverse();
         println!("fp_dbl ={:x?}", r); // 551de7a0ee24723edcf314ff72f478fac1c7c4e7044238acc3913cfbcdaf7d05
 
         let mut r = a.fp_triple();
-        r = from_mont(&r);
+        r = fp_from_mont(&r);
         r.reverse();
         println!("fp_tri ={:x?}", r); // 248cdb7163e4d7e5606ac9d731a751d591b25db4f925dd9532a20de5c2de98c9
 
         let mut r = a.fp_div2();
-        r = from_mont(&r);
+        r = fp_from_mont(&r);
         r.reverse();
         println!("fp_div2 ={:x?}", r); // 9df779e83d83d9c517bf85bbd4e833b289e7dfb214ecc1501cf8039cdde8d35f
 
         let mut r = a.fp_neg();
-        r = from_mont(&r);
+        r = fp_from_mont(&r);
         r.reverse();
         println!("fp_neg ={:x?}", r); // 30910c2f8a3f9a597c884b28414d2725301567320b1c5b1790ef2f160ad0e43c
 
         let mut r = a.fp_sqr();
-        r = from_mont(&r);
+        r = fp_from_mont(&r);
         r.reverse();
         println!("fp_sqr ={:x?}", r); // 46dc2a5b8853234b341d9c57f9c4ca5709e95bbfef25356812e884e4f38cd0d6
 
-        b = from_mont(&b);
+        b = fp_from_mont(&b);
         let mut r = fp_pow(&a, &b);
-        r = from_mont(&r);
+        r = fp_from_mont(&r);
         r.reverse();
         println!("fp_pow ={:x?}", r);
 
         let mut r = a.fp_inv();
-        r = from_mont(&r);
+        r = fp_from_mont(&r);
         r.reverse();
         println!("fp_inv ={:x?}", r);
     }

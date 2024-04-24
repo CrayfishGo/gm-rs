@@ -259,7 +259,7 @@ impl Fp2 {
 #[cfg(test)]
 mod test_mod_operation {
     use crate::fields::FieldElement;
-    use crate::fields::fp::{from_mont, to_mont};
+    use crate::fields::fp::{fp_from_mont, fp_to_mont};
     use crate::fields::fp2::Fp2;
 
     #[test]
@@ -294,15 +294,15 @@ mod test_mod_operation {
             ],
         };
 
-        a.c0 = to_mont(&a.c0);
-        a.c1 = to_mont(&a.c1);
+        a.c0 = fp_to_mont(&a.c0);
+        a.c1 = fp_to_mont(&a.c1);
 
-        b.c0 = to_mont(&b.c0);
-        b.c1 = to_mont(&b.c1);
+        b.c0 = fp_to_mont(&b.c0);
+        b.c1 = fp_to_mont(&b.c1);
 
         let mut r = a.fp_add(&b);
-        r.c0 = from_mont(&r.c0);
-        r.c1 = from_mont(&r.c1);
+        r.c0 = fp_from_mont(&r.c0);
+        r.c1 = fp_from_mont(&r.c1);
         r.c0.reverse();
         r.c1.reverse();
         println!("fp_add ={:x?}", r); // [1b6ac9eb2c47b62c, f61608b26c3c7e20, 674a48c4c509ac13, bbaf6d47d32c07c], c1: [74a3145c65ac54, 7541612178e584a9, 2248740e70606dc, aaafe2bcbd2f6a21]
