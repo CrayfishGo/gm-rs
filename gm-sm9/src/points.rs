@@ -1,5 +1,6 @@
 use crate::fields::fp::Fp;
 use crate::fields::FieldElement;
+use crate::sm9_p256_table::SM9_P256_PRECOMPUTED;
 use crate::u256::{sm9_u256_get_booth, SM9_ZERO, U256};
 
 #[derive(Copy, Debug, Clone)]
@@ -145,32 +146,44 @@ impl Point {
         let z2 = rhs.z;
 
         let mut t1 = z1.fp_sqr();
-        let mut t2 = t1.fp_mul(&z1);
-        t1 = t1.fp_mul(&x2);
-        t2 = t2.fp_mul(&y2);
-        t1 = t1.fp_sub(&x1);
-        t2 = t2.fp_sub(&y1);
+        let mut t2 = z2.fp_sqr();
+        let u1 = x1.fp_mul(&t2);
+        let mut u2 = x2.fp_mul(&t1);
+        let mut z3 = z1.fp_add(&z2);
+        z3 = z3.fp_sqr();
+        z3 = z3.fp_sub(&t1);
+        z3 = z3.fp_sub(&t2);
+        t1 = t1.fp_mul(&z1);
+        t2 = t2.fp_mul(&z2);
+        let mut s1 = y1.fp_mul(&t2);
+        let mut s2 = y2.fp_mul(&t1);
+        let mut h = u2.fp_sub(&u1);
+        u2 = s2.fp_sub(&s1);
 
-        if t1 == SM9_ZERO {
-            return if t2 == SM9_ZERO {
+        if h == SM9_ZERO {
+            return if u2 == SM9_ZERO {
                 rhs.point_double()
             } else {
                 Point::zero()
             };
         }
 
-        let z3 = z1.fp_mul(&t1);
-        let mut t3 = t1.fp_sqr();
-        let mut t4 = t3.fp_mul(&t1);
-        t3 = t3.fp_mul(&x1);
-        t1 = t3.fp_double();
-        let mut x3 = t2.fp_sqr();
-        x3 = x3.fp_sub(&t1);
-        x3 = x3.fp_sub(&t4);
-        t3 = t3.fp_sub(&x3);
-        t3 = t3.fp_sub(&x3);
-        t4 = t4.fp_mul(&y1);
-        let y3 = t3.fp_sub(&t4);
+        z3 = z3.fp_mul(&h);
+        let mut i = h.fp_double();
+        i = i.fp_sqr();
+        h = h.fp_mul(&i);
+        i = u1.fp_mul(&i);
+        u2 = u2.fp_double();
+        let mut x3 = u2.fp_sqr();
+        x3 = h.fp_sub(&x3);
+        let mut y3 = i.fp_triple();
+        x3 = y3.fp_add(&x3);
+        y3 = u2.fp_mul(&x3);
+        s1 = s1.fp_mul(&h);
+        s1 = s1.fp_double();
+        y3 = y3.fp_sub(&s1);
+        x3 = i.fp_sub(&x3);
+
         Point {
             x: x3,
             y: y3,
@@ -252,6 +265,54 @@ impl Point {
         }
         r
     }
+
+    pub fn to_jacobi(&self) -> Self {
+        Self {
+            x: self.x,
+            y: self.y,
+            z: Fp::one(),
+        }
+    }
+
+    pub fn g_mul(k: &[u64]) -> Point {
+        let mut pre_com_points: Vec<Vec<Point>> = vec![];
+        let p = &SM9_P256_PRECOMPUTED;
+        for i in 0..p.len() {
+            let mut points = vec![];
+            let p1 = p[i];
+            for j in 0..(p1.len() / 2) {
+                points.push(Point {
+                    x: p1[j * 2],
+                    y: p1[j * 2 + 1],
+                    z: Fp::one(),
+                })
+            }
+            pre_com_points.push(points);
+        }
+
+        let mut r = Point::zero();
+        let window_size = 7u64;
+        let mut r_infinity = true;
+        let n = (256 + window_size - 1) / window_size;
+        for i in (0..n).rev() {
+            let booth = sm9_u256_get_booth(&k, window_size, i);
+            if r_infinity {
+                if booth != 0 {
+                    r = pre_com_points[i as usize][(booth - 1) as usize];
+                    r_infinity = false;
+                }
+            } else {
+                if booth > 0 {
+                    let p = pre_com_points[i as usize][(booth - 1) as usize];
+                    r = r.point_add(&p);
+                } else if booth < 0 {
+                    let p = pre_com_points[i as usize][(-booth - 1) as usize];
+                    r = r.point_sub(&p);
+                }
+            }
+        }
+        r
+    }
 }
 
 impl TwistPoint {
@@ -273,5 +334,66 @@ impl TwistPoint {
 
     pub fn point_mul(&self, k: &U256) -> Self {
         todo!()
+    }
+}
+
+#[cfg(test)]
+mod test_point_operation {
+    use crate::fields::fp::{fp_to_mont, Fp};
+    use crate::fields::FieldElement;
+    use crate::points::Point;
+    use crate::u256::u256_from_be_bytes;
+
+    #[test]
+    fn test_g_mul() {
+        let k = u256_from_be_bytes(
+            &hex::decode("123456789abcdef00fedcba987654321123456789abcdef00fedcba987654321")
+                .unwrap(),
+        );
+        let r = Point::g_mul(&k);
+        println!("r = {:#?}", r);
+    }
+
+    #[test]
+    fn test_point_add() {
+
+    }
+
+    #[test]
+    fn test_point_dbl() {
+
+    }
+
+    #[test]
+    fn test_point_sub() {
+
+    }
+
+    #[test]
+    fn test_point_neg() {
+
+    }
+
+    #[test]
+    fn test_point_mul() {
+        let p = Point {
+            x: fp_to_mont(&u256_from_be_bytes(
+                &hex::decode("917be49d159184fba140f4dfc5d653464e94f718fe195b226b3f715829e6e768")
+                    .unwrap(),
+            )),
+            y: fp_to_mont(&u256_from_be_bytes(
+                &hex::decode("288578d9505d462867a50acee40ee143b896e72505be10e8ce4c6b0c945b642b")
+                    .unwrap(),
+            )),
+            z: Fp::one(),
+        };
+
+        let k = u256_from_be_bytes(
+            &hex::decode("123456789abcdef00fedcba987654321123456789abcdef00fedcba987654321")
+                .unwrap(),
+        );
+
+        let r = p.point_mul(&k);
+        println!("{:x?}", r);
     }
 }

@@ -197,7 +197,9 @@ pub fn sm9_u256_get_booth(a: &[u64], window_size: u64, i: u64) -> i32 {
 mod test_operation {
     use num_bigint::BigUint;
 
-    use crate::u256::{u256_add, u256_from_be_bytes, u256_mul, u256_sub, u256_to_be_bytes};
+    use crate::u256::{
+        sm9_u256_get_booth, u256_add, u256_from_be_bytes, u256_mul, u256_sub, u256_to_be_bytes,
+    };
 
     #[test]
     fn test_raw_add_u64() {
@@ -263,5 +265,19 @@ mod test_operation {
 
         let ret = u256_from_be_bytes(&r_b);
         assert_eq!(ret, a);
+    }
+
+    #[test]
+    fn test_get_booth() {
+        let k = u256_from_be_bytes(
+            &hex::decode("123456789abcdef00fedcba987654321123456789abcdef00fedcba987654321")
+                .unwrap(),
+        );
+        let window_size = 7u64;
+        let n = (256 + window_size - 1) / window_size;
+        for i in (0..n).rev() {
+            let booth = sm9_u256_get_booth(&k, window_size, i);
+            println!("i = {}, booth = {}", i, booth);
+        }
     }
 }

@@ -226,8 +226,9 @@ impl FieldElement for Fp {
         let mut r = self.clone();
         let mut c = 0;
         if r[0] & 0x01 == 1 {
-            r = self.fp_add(&SM9_P);
-            c = u64::from(u256_add(self, &SM9_P).1)
+            let (sum, carry) = u256_add(self, &SM9_P);
+            c = carry as u64;
+            r = sum;
         } else {
             r[0] = self[0];
             r[1] = self[1];
