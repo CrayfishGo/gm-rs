@@ -1,5 +1,6 @@
 use rand::RngCore;
 
+use crate::fields::fp2::Fp2;
 use crate::fields::FieldElement;
 use crate::u256::{
     u256_add, u256_cmp, u256_from_be_bytes, u256_mul, u256_sub, u256_to_be_bytes, u512_add,
@@ -247,9 +248,13 @@ impl FieldElement for Fp {
     }
 }
 
+pub fn fp_from_hex(hex: &str) -> Fp {
+    u256_from_be_bytes(&hex::decode(hex).unwrap())
+}
+
 #[cfg(test)]
 mod test_mod_operation {
-    use crate::fields::fp::{fp_pow, fp_from_mont, fp_to_mont};
+    use crate::fields::fp::{fp_from_mont, fp_pow, fp_to_mont};
     use crate::fields::FieldElement;
 
     #[test]

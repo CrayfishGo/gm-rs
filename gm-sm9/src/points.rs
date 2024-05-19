@@ -1,7 +1,8 @@
 use crate::fields::fp::Fp;
+use crate::fields::fp2::Fp2;
 use crate::fields::FieldElement;
 use crate::sm9_p256_table::SM9_P256_PRECOMPUTED;
-use crate::u256::{sm9_u256_get_booth, SM9_ZERO, U256};
+use crate::u256::{sm9_u256_get_booth, u256_to_be_bytes, SM9_ZERO, U256};
 
 #[derive(Copy, Debug, Clone)]
 pub struct Point {
@@ -12,9 +13,9 @@ pub struct Point {
 
 #[derive(Copy, Debug, Clone)]
 pub struct TwistPoint {
-    x: [U256; 2],
-    y: [U256; 2],
-    z: [U256; 2],
+    x: Fp2,
+    y: Fp2,
+    z: Fp2,
 }
 
 // 群 G1的生成元 P1 = (xP1 , yP1);
@@ -45,35 +46,119 @@ const G1: Point = Point {
 */
 // 群 G2的生成元 P2 = (xP2, yP2)：
 const G2: TwistPoint = TwistPoint {
-    x: [
-        [
+    x: Fp2 {
+        c0: [
             0xF9B7213BAF82D65B,
             0xEE265948D19C17AB,
             0xD2AAB97FD34EC120,
             0x3722755292130B08,
         ],
-        [
+        c1: [
             0x54806C11D8806141,
             0xF1DD2C190F5E93C4,
             0x597B6027B441A01F,
             0x85AEF3D078640C98,
         ],
-    ],
-    y: [
-        [
+    },
+
+    y: Fp2 {
+        c0: [
             0x6215BBA5C999A7C7,
             0x47EFBA98A71A0811,
             0x5F3170153D278FF2,
             0xA7CF28D519BE3DA6,
         ],
-        [
+        c1: [
             0x856DC76B84EBEB96,
             0x0736A96FA347C8BD,
             0x66BA0D262CBEE6ED,
             0x17509B092E845C12,
         ],
-    ],
-    z: [[1, 0, 0, 0], [0, 0, 0, 0]],
+    },
+
+    z: Fp2 {
+        c0: [1, 0, 0, 0],
+        c1: [0, 0, 0, 0],
+    },
+};
+
+const SM9_U256_Ppubs: TwistPoint = TwistPoint {
+    x: Fp2 {
+        c0: [
+            0x8F14D65696EA5E32,
+            0x414D2177386A92DD,
+            0x6CE843ED24A3B573,
+            0x29DBA116152D1F78,
+        ],
+        c1: [
+            0x0AB1B6791B94C408,
+            0x1CE0711C5E392CFB,
+            0xE48AFF4B41B56501,
+            0x9F64080B3084F733,
+        ],
+    },
+
+    y: Fp2 {
+        c0: [
+            0x0E75C05FB4E3216D,
+            0x1006E85F5CDFF073,
+            0x1A7CE027B7A46F74,
+            0x41E00A53DDA532DA,
+        ],
+        c1: [
+            0xE89E1408D0EF1C25,
+            0xAD3E2FDB1A77F335,
+            0xB57329F447E3A0CB,
+            0x69850938ABEA0112,
+        ],
+    },
+
+    z: Fp2 {
+        c0: [1, 0, 0, 0],
+        c1: [0, 0, 0, 0],
+    },
+};
+
+const SM9_U256_MONT_G2: TwistPoint = TwistPoint {
+    x: Fp2 {
+        c0: [
+            0x260226a68ce2da8f,
+            0x7ee5645edbf6c06b,
+            0xf8f57c82b1495444,
+            0x61fcf018bc47c4d1,
+        ],
+        c1: [
+            0xdb6db4822750a8a6,
+            0x84c6135a5121f134,
+            0x1874032f88791d41,
+            0x905112f2b85f3a37,
+        ],
+    },
+
+    y: Fp2 {
+        c0: [
+            0xc03f138f9171c24a,
+            0x92fbab45a15a3ca7,
+            0x2445561e2ff77cdb,
+            0x108495e0c0f62ece,
+        ],
+        c1: [
+            0xf7b82dac4c89bfbb,
+            0x3706f3f6a49dc12f,
+            0x1e29de93d3eef769,
+            0x81e448c3c76a5d53,
+        ],
+    },
+
+    z: Fp2 {
+        c0: [
+            0x1a9064d81caeba83,
+            0xde0d6cb4e5851124,
+            0x29fc54b00a7138ba,
+            0x49bffffffd5c590e,
+        ],
+        c1: [0, 0, 0, 0],
+    },
 };
 
 impl Point {
@@ -316,24 +401,183 @@ impl Point {
 }
 
 impl TwistPoint {
+    pub fn zero() -> Self {
+        Self {
+            x: Fp2::one(),
+            y: Fp2::one(),
+            z: Fp2::zero(),
+        }
+    }
+
     pub fn point_double(&self) -> Self {
-        todo!()
+        if self.z.is_zero() {
+            return self.clone();
+        }
+
+        let x1 = self.x;
+        let y1 = self.y;
+        let z1 = self.z;
+
+        let mut t2 = x1.fp_sqr().fp_triple();
+        let mut y3 = y1.fp_double();
+        let mut z3 = y3.fp_mul(&z1);
+        y3 = y3.fp_sqr();
+        let t3 = y3.fp_mul(&x1);
+        y3 = y3.fp_sqr();
+        y3 = y3.fp_div2();
+
+        let mut x3 = t2.fp_sqr();
+        let mut t1 = t3.fp_double();
+        x3 = x3.fp_sub(&t1);
+        t1 = t3.fp_sub(&x3);
+
+        t1 = t1.fp_mul(&t2);
+        y3 = t1.fp_sub(&y3);
+
+        Self {
+            x: x3,
+            y: y3,
+            z: z3,
+        }
     }
 
     pub fn point_add(&self, rhs: &Self) -> Self {
-        todo!()
+        let x1 = self.x;
+        let y1 = self.y;
+        let z1 = self.z;
+
+        let x2 = rhs.x;
+        let y2 = rhs.y;
+        let z2 = rhs.z;
+
+        if z1.is_zero() {
+            return rhs.clone();
+        }
+
+        if z2.is_zero() {
+            return self.clone();
+        }
+
+        let mut t1 = z1.fp_sqr();
+        let mut t2 = t1.fp_mul(&z1);
+
+        t1 = t1.fp_mul(&x2);
+        t2 = t2.fp_mul(&y2);
+        t1 = t1.fp_sub(&x1);
+        t2 = t2.fp_sub(&y1);
+
+        if t1.is_zero() {
+            if t2.is_zero() {
+                return rhs.point_double();
+            }
+        } else {
+            return TwistPoint::zero();
+        }
+
+        let mut z3 = z1.fp_mul(&t1);
+        let mut t3 = t1.fp_sqr();
+        let mut t4 = t3.fp_mul(&t1);
+        t3 = t3.fp_mul(&x1);
+        t1 = t3.fp_double();
+        let mut x3 = t2.fp_sqr();
+        x3 = x3.fp_sub(&t1);
+        x3 = x3.fp_sub(&t4);
+        t3 = t3.fp_sub(&x3);
+        t3 = t3.fp_mul(&t2);
+        t4 = t4.fp_mul(&y1);
+        let y3 = t3.fp_sub(&t4);
+
+        Self {
+            x: x3,
+            y: y3,
+            z: z3,
+        }
     }
 
     pub fn point_sub(&self, rhs: &Self) -> Self {
-        todo!()
+        let t = rhs.point_neg();
+        twist_point_add_full(self, &t)
     }
 
     pub fn point_neg(&self) -> Self {
-        todo!()
+        TwistPoint {
+            x: self.x.clone(),
+            y: self.y.fp_neg().clone(),
+            z: self.z.clone(),
+        }
     }
 
     pub fn point_mul(&self, k: &U256) -> Self {
-        todo!()
+        let kbits = u256_to_be_bytes(k);
+        let mut r = TwistPoint::zero();
+        for i in 0..256 {
+            r = r.point_double();
+            if kbits[i] & 0x1 == 1 {
+                r = twist_point_add_full(&r, self)
+            }
+        }
+        r
+    }
+
+    pub fn g_mul(k: &U256) -> TwistPoint {
+        SM9_U256_MONT_G2.point_mul(k)
+    }
+}
+
+fn twist_point_add_full(p1: &TwistPoint, p2: &TwistPoint) -> TwistPoint {
+    let x1 = p1.x;
+    let y1 = p1.y;
+    let z1 = p1.z;
+    let x2 = p2.x;
+    let y2 = p2.y;
+    let z2 = p2.z;
+
+    if z1.is_zero() {
+        return p2.clone();
+    }
+
+    if z2.is_zero() {
+        return p1.clone();
+    }
+
+    let mut t1 = z1.fp_sqr();
+    let mut t2 = z2.fp_sqr();
+    let mut t3 = x2.fp_mul(&t1);
+    let mut t4 = x1.fp_mul(&t2);
+    let mut t5 = t3.fp_add(&t4);
+    t3 = t3.fp_sub(&t4);
+    t1 = t1.fp_mul(&z1);
+    t1 = t1.fp_mul(&y2);
+    t2 = t2.fp_mul(&z2);
+    t2 = t2.fp_mul(&y1);
+    let mut t6 = t1.fp_add(&t2);
+    t1 = t1.fp_sub(&t2);
+
+    if t1.is_zero() && t3.is_zero() {
+        return p1.point_double();
+    }
+
+    if t1.is_zero() && t6.is_zero() {
+        return TwistPoint::zero();
+    }
+
+    t6 = t1.fp_sqr();
+    let mut t7 = t3.fp_mul(&z1);
+    t7 = t7.fp_mul(&z2);
+    let t8 = t3.fp_sqr();
+    t5 = t5.fp_mul(&t8);
+    t3 = t3.fp_mul(&t8);
+    t4 = t4.fp_mul(&t8);
+    t6 = t6.fp_sub(&t5);
+    t4 = t4.fp_sub(&t6);
+    t1 = t1.fp_mul(&t4);
+    t2 = t2.fp_mul(&t3);
+    t1 = t1.fp_sub(&t2);
+
+    TwistPoint {
+        x: t6,
+        y: t1,
+        z: t7,
     }
 }
 
@@ -355,24 +599,16 @@ mod test_point_operation {
     }
 
     #[test]
-    fn test_point_add() {
-
-    }
+    fn test_point_add() {}
 
     #[test]
-    fn test_point_dbl() {
-
-    }
+    fn test_point_dbl() {}
 
     #[test]
-    fn test_point_sub() {
-
-    }
+    fn test_point_sub() {}
 
     #[test]
-    fn test_point_neg() {
-
-    }
+    fn test_point_neg() {}
 
     #[test]
     fn test_point_mul() {
@@ -395,5 +631,54 @@ mod test_point_operation {
 
         let r = p.point_mul(&k);
         println!("{:x?}", r);
+    }
+
+    fn is_alternating(list: &[f64]) -> bool {
+        // 判断列表是否为空或者只有一个元素，如果是，则认为满足条件
+        if list.len() <= 1 {
+            return true;
+        }
+
+        // 遍历列表，检查相邻元素是否满足交替升降的条件
+        let mut last_flag = -1;
+        for i in 1..list.len() {
+            if list[i] == list[i - 1] {
+                // 如果相邻元素相等，则不满足条件，直接返回false
+                return false;
+            }
+
+            let diff = list[i] - list[i - 1];
+
+            let mut current_flag = -1;
+            if diff < 0.0 {
+                current_flag = 0;
+            } else {
+                current_flag = 1;
+            }
+
+            if last_flag == current_flag {
+                return false;
+            }
+
+            last_flag = current_flag;
+        }
+
+        // 如果遍历完列表没有发现不满足条件的情况，则认为满足条件，返回true
+        true
+    }
+
+    #[test]
+    fn test_is_alternating() {
+        let example_list = vec![1.0, 2.0, 1.5, 2.5, 1.2, 2.8];
+        println!("Is the list alternating? {}", is_alternating(&example_list));
+
+        let example_list = vec![1.0, 1.0, 1.5, 2.5, 1.2, 2.8];
+        println!("Is the list alternating? {}", is_alternating(&example_list));
+
+        let example_list = vec![1.0, 0.8, 1.5, 0.5, 1.2, 0.8];
+        println!("Is the list alternating? {}", is_alternating(&example_list));
+
+        let example_list = vec![1.0, 1.3, 1.5, 2.5, 1.2, 2.8];
+        println!("Is the list alternating? {}", is_alternating(&example_list));
     }
 }
