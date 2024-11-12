@@ -2,7 +2,7 @@ use crate::fields::fp::Fp;
 use crate::fields::fp2::Fp2;
 use crate::fields::FieldElement;
 use crate::sm9_p256_table::SM9_P256_PRECOMPUTED;
-use crate::u256::{sm9_u256_get_booth, u256_to_be_bytes, SM9_ZERO, U256};
+use crate::u256::{sm9_u256_get_booth, u256_cmp, u256_to_be_bytes, SM9_ZERO, U256};
 
 #[derive(Copy, Debug, Clone)]
 pub struct Point {
@@ -168,6 +168,27 @@ impl Point {
             y: Fp::one(),
             z: Fp::zero(),
         }
+    }
+
+    pub fn point_equals(&self, rhs: &Self) -> bool {
+        let (mut t1, mut t2, mut t3, mut t4) =
+            (U256::zero(), U256::zero(), U256::zero(), U256::zero());
+        t1 = self.z.fp_sqr();
+        t2 = rhs.z.fp_sqr();
+        t3 = self.x.fp_mul(&t2);
+        t4 = rhs.x.fp_mul(&t1);
+        if u256_cmp(&t3, &t4) != 0 {
+            return false;
+        }
+
+        t1 = t1.fp_mul(&self.z);
+        t2 = t2.fp_mul(&rhs.z);
+        t3 = self.y.fp_mul(&t2);
+        t4 = rhs.y.fp_mul(&t1);
+        if u256_cmp(&t3, &t4) == 0 {
+            return true;
+        }
+        false
     }
 
     pub fn is_zero(&self) -> bool {
@@ -584,8 +605,9 @@ fn twist_point_add_full(p1: &TwistPoint, p2: &TwistPoint) -> TwistPoint {
 #[cfg(test)]
 mod test_point_operation {
     use crate::fields::fp::{fp_to_mont, Fp};
+    use crate::fields::fp2::Fp2;
     use crate::fields::FieldElement;
-    use crate::points::Point;
+    use crate::points::{Point, TwistPoint};
     use crate::u256::u256_from_be_bytes;
 
     #[test]
@@ -595,20 +617,162 @@ mod test_point_operation {
                 .unwrap(),
         );
         let r = Point::g_mul(&k);
-        println!("r = {:#?}", r);
+
+        let ret = Point {
+            x: fp_to_mont(&u256_from_be_bytes(
+                &hex::decode("7cf689748f3714490d7a19eae0e7bfad0e0182498b7bcd8a6998dfd00f59be51")
+                    .unwrap(),
+            )),
+            y: fp_to_mont(&u256_from_be_bytes(
+                &hex::decode("4e2e98d190e9d775e0caa943196bfb066d9c30818b2d768fb5299e7135830a6f")
+                    .unwrap(),
+            )),
+            z: Fp::one(),
+        };
+        assert_eq!(true, r.point_equals(&ret));
     }
 
     #[test]
-    fn test_point_add() {}
+    fn test_point_add() {
+        let p1 = Point {
+            x: fp_to_mont(&u256_from_be_bytes(
+                &hex::decode("917be49d159184fba140f4dfc5d653464e94f718fe195b226b3f715829e6e768")
+                    .unwrap(),
+            )),
+            y: fp_to_mont(&u256_from_be_bytes(
+                &hex::decode("288578d9505d462867a50acee40ee143b896e72505be10e8ce4c6b0c945b642b")
+                    .unwrap(),
+            )),
+            z: Fp::one(),
+        };
+
+        let p2 = Point {
+            x: fp_to_mont(&u256_from_be_bytes(
+                &hex::decode("593417680f252445fd0522383e23c77a54b11fe222de4a886eabc26e16bffa3c")
+                    .unwrap(),
+            )),
+            y: fp_to_mont(&u256_from_be_bytes(
+                &hex::decode("38e8fc9a8b60f5ba0c6c411f721c117044435a833757d8fee65828511b8b245d")
+                    .unwrap(),
+            )),
+            z: Fp::one(),
+        };
+
+        let ret = Point {
+            x: fp_to_mont(&u256_from_be_bytes(
+                &hex::decode("056610cb69f8d5659ea94e4a67bbf3b93fb0bd449672d7ca2525ec3b68c894d1")
+                    .unwrap(),
+            )),
+            y: fp_to_mont(&u256_from_be_bytes(
+                &hex::decode("88f3f99ce78ed3ffe6ca1cface5242570cb5d053f16a8e0baae10414babd86a7")
+                    .unwrap(),
+            )),
+            z: Fp::one(),
+        };
+
+        let r = p1.point_add(&p2);
+        assert_eq!(true, r.point_equals(&ret));
+    }
 
     #[test]
-    fn test_point_dbl() {}
+    fn test_point_dbl() {
+        let p = Point {
+            x: fp_to_mont(&u256_from_be_bytes(
+                &hex::decode("917be49d159184fba140f4dfc5d653464e94f718fe195b226b3f715829e6e768")
+                    .unwrap(),
+            )),
+            y: fp_to_mont(&u256_from_be_bytes(
+                &hex::decode("288578d9505d462867a50acee40ee143b896e72505be10e8ce4c6b0c945b642b")
+                    .unwrap(),
+            )),
+            z: Fp::one(),
+        };
+
+        let r = p.point_double();
+        let ret = Point {
+            x: fp_to_mont(&u256_from_be_bytes(
+                &hex::decode("268def7968f1e8c51635e277425403df88355fb2ecf16f7920f112eb2a7e50c9")
+                    .unwrap(),
+            )),
+            y: fp_to_mont(&u256_from_be_bytes(
+                &hex::decode("5c596b534bbaa85c1d3aecf436e61ff1bfd9f70856f0309c2a63d8248205d84e")
+                    .unwrap(),
+            )),
+            z: Fp::one(),
+        };
+        assert_eq!(true, r.point_equals(&ret));
+    }
 
     #[test]
-    fn test_point_sub() {}
+    fn test_point_sub() {
+        let p1 = Point {
+            x: fp_to_mont(&u256_from_be_bytes(
+                &hex::decode("917be49d159184fba140f4dfc5d653464e94f718fe195b226b3f715829e6e768")
+                    .unwrap(),
+            )),
+            y: fp_to_mont(&u256_from_be_bytes(
+                &hex::decode("288578d9505d462867a50acee40ee143b896e72505be10e8ce4c6b0c945b642b")
+                    .unwrap(),
+            )),
+            z: Fp::one(),
+        };
+
+        let p2 = Point {
+            x: fp_to_mont(&u256_from_be_bytes(
+                &hex::decode("593417680f252445fd0522383e23c77a54b11fe222de4a886eabc26e16bffa3c")
+                    .unwrap(),
+            )),
+            y: fp_to_mont(&u256_from_be_bytes(
+                &hex::decode("38e8fc9a8b60f5ba0c6c411f721c117044435a833757d8fee65828511b8b245d")
+                    .unwrap(),
+            )),
+            z: Fp::one(),
+        };
+
+        let ret = Point {
+            x: fp_to_mont(&u256_from_be_bytes(
+                &hex::decode("29e4a54cad98da9939b95f677784bff3b1dd9334c83d93e351e0f8f7c4ce2dc5")
+                    .unwrap(),
+            )),
+            y: fp_to_mont(&u256_from_be_bytes(
+                &hex::decode("4473eba3b8ff990b8456c41ec0727b76cb2b0f960495b144949f70bf95643b82")
+                    .unwrap(),
+            )),
+            z: Fp::one(),
+        };
+
+        let r = p1.point_sub(&p2);
+        assert_eq!(true, r.point_equals(&ret));
+    }
 
     #[test]
-    fn test_point_neg() {}
+    fn test_point_neg() {
+        let p = Point {
+            x: fp_to_mont(&u256_from_be_bytes(
+                &hex::decode("917be49d159184fba140f4dfc5d653464e94f718fe195b226b3f715829e6e768")
+                    .unwrap(),
+            )),
+            y: fp_to_mont(&u256_from_be_bytes(
+                &hex::decode("288578d9505d462867a50acee40ee143b896e72505be10e8ce4c6b0c945b642b")
+                    .unwrap(),
+            )),
+            z: Fp::one(),
+        };
+
+        let r = p.point_neg();
+        let ret = Point {
+            x: fp_to_mont(&u256_from_be_bytes(
+                &hex::decode("917be49d159184fba140f4dfc5d653464e94f718fe195b226b3f715829e6e768")
+                    .unwrap(),
+            )),
+            y: fp_to_mont(&u256_from_be_bytes(
+                &hex::decode("8dba8726b24660c96e5ea081117fe601695bac2614bcddf31723301b4ef5e152")
+                    .unwrap(),
+            )),
+            z: Fp::one(),
+        };
+        assert_eq!(true, r.point_equals(&ret));
+    }
 
     #[test]
     fn test_point_mul() {
@@ -630,55 +794,57 @@ mod test_point_operation {
         );
 
         let r = p.point_mul(&k);
-        println!("{:x?}", r);
-    }
 
-    fn is_alternating(list: &[f64]) -> bool {
-        // 判断列表是否为空或者只有一个元素，如果是，则认为满足条件
-        if list.len() <= 1 {
-            return true;
-        }
-
-        // 遍历列表，检查相邻元素是否满足交替升降的条件
-        let mut last_flag = -1;
-        for i in 1..list.len() {
-            if list[i] == list[i - 1] {
-                // 如果相邻元素相等，则不满足条件，直接返回false
-                return false;
-            }
-
-            let diff = list[i] - list[i - 1];
-
-            let mut current_flag = -1;
-            if diff < 0.0 {
-                current_flag = 0;
-            } else {
-                current_flag = 1;
-            }
-
-            if last_flag == current_flag {
-                return false;
-            }
-
-            last_flag = current_flag;
-        }
-
-        // 如果遍历完列表没有发现不满足条件的情况，则认为满足条件，返回true
-        true
+        let ret = Point {
+            x: fp_to_mont(&u256_from_be_bytes(
+                &hex::decode("997fcff625adbae62566f684f9e89181713f972c5a9cd9ce6764636761ba87d1")
+                    .unwrap(),
+            )),
+            y: fp_to_mont(&u256_from_be_bytes(
+                &hex::decode("8142a28d1bd109501452a649e2d68f012e265460e0c7d3da743fb036eb23b03b")
+                    .unwrap(),
+            )),
+            z: Fp::one(),
+        };
+        assert_eq!(true, r.point_equals(&ret));
     }
 
     #[test]
-    fn test_is_alternating() {
-        let example_list = vec![1.0, 2.0, 1.5, 2.5, 1.2, 2.8];
-        println!("Is the list alternating? {}", is_alternating(&example_list));
+    fn test_twist_point_add() {
+        let p = TwistPoint {
+            x: Fp2 {
+                c0: fp_to_mont(&u256_from_be_bytes(
+                    &hex::decode(
+                        "9a79bfd491ef1cb32d9b57f7d0590ccff6b1cfe63dd15c0823d692fafbe96dbc",
+                    )
+                    .unwrap(),
+                )),
+                c1: fp_to_mont(&u256_from_be_bytes(
+                    &hex::decode(
+                        "83f6a65d85d51ec72eacf19bc38384e0369eb22a134a725a0191faa6e4f192ef",
+                    )
+                    .unwrap(),
+                )),
+            },
+            y: Fp2 {
+                c0: fp_to_mont(&u256_from_be_bytes(
+                    &hex::decode(
+                        "849d4434eb7113fc9fb3809b51d54064fa2f20503423d256bc044905b1eba3fb",
+                    )
+                    .unwrap(),
+                )),
+                c1: fp_to_mont(&u256_from_be_bytes(
+                    &hex::decode(
+                        "9ed11c499291db0454d738555af0ce8a1df960056ee7425a6bf296eae60a5037",
+                    )
+                    .unwrap(),
+                )),
+            },
+            z: Fp2::one(),
+        };
 
-        let example_list = vec![1.0, 1.0, 1.5, 2.5, 1.2, 2.8];
-        println!("Is the list alternating? {}", is_alternating(&example_list));
+        let r = p.point_double();
 
-        let example_list = vec![1.0, 0.8, 1.5, 0.5, 1.2, 0.8];
-        println!("Is the list alternating? {}", is_alternating(&example_list));
-
-        let example_list = vec![1.0, 1.3, 1.5, 2.5, 1.2, 2.8];
-        println!("Is the list alternating? {}", is_alternating(&example_list));
+        println!("{:?}", p)
     }
 }

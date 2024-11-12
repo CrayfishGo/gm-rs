@@ -122,7 +122,7 @@ pub const fn u256_cmp(a: &U256, b: &U256) -> i32 {
     if a[0] < b[0] {
         return -1;
     }
-    return 0;
+    0
 }
 
 #[inline(always)]
@@ -190,7 +190,7 @@ pub fn sm9_u256_get_booth(a: &[u64], window_size: u64, i: u64) -> i32 {
     if (64 - j) < (window_size + 1) as usize && n < 3 {
         wbits |= a[n + 1] << (64 - j);
     }
-    return ((wbits & mask) as i32) - (((wbits >> 1) & mask) as i32);
+    ((wbits & mask) as i32) - (((wbits >> 1) & mask) as i32)
 }
 
 #[cfg(test)]
