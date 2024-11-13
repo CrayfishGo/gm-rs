@@ -1,6 +1,6 @@
-use crate::fields::fp::{fp_from_hex, fp_to_mont, Fp};
+use crate::fields::fp::{fp_from_hex, Fp};
 use crate::fields::FieldElement;
-use crate::u256::{u256_from_be_bytes, U256};
+use crate::u256::U256;
 
 const SM9_FP2_ZERO: [U256; 2] = [[0, 0, 0, 0], [0, 0, 0, 0]];
 const SM9_FP2_ONE: [U256; 2] = [[1, 0, 0, 0], [0, 0, 0, 0]];
@@ -255,10 +255,10 @@ impl Fp2 {
         r
     }
 
-    pub fn from_hex(hex: Box<[&str]>) -> Fp2 {
+    pub fn from_hex(hex: [&str; 2]) -> Fp2 {
         Fp2 {
-            c0: fp_to_mont(&fp_from_hex(hex[0])),
-            c1: fp_to_mont(&fp_from_hex(hex[1])),
+            c0: fp_from_hex(hex[0]),
+            c1: fp_from_hex(hex[1]),
         }
     }
 }

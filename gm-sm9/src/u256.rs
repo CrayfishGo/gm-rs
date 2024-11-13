@@ -1,5 +1,6 @@
 use crate::fields::FieldElement;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use rand::RngCore;
 use std::io::Cursor;
 
 pub type U256 = [u64; 4];
@@ -9,6 +10,21 @@ pub(crate) const SM9_ZERO: U256 = [0, 0, 0, 0];
 pub(crate) const SM9_ONE: U256 = [1, 0, 0, 0];
 pub(crate) const SM9_TWO: U256 = [2, 0, 0, 0];
 pub(crate) const SM9_FIVE: U256 = [5, 0, 0, 0];
+
+#[inline(always)]
+pub fn sm9_random_u256(range: &U256) -> U256 {
+    let mut rng = rand::thread_rng();
+    let mut buf: [u8; 32] = [0; 32];
+    let mut ret;
+    loop {
+        rng.fill_bytes(&mut buf[..]);
+        ret = u256_from_be_bytes(&buf);
+        if u256_cmp(&ret, range) < 0 && ret != [0, 0, 0, 0] {
+            break;
+        }
+    }
+    ret
+}
 
 #[inline(always)]
 pub const fn u256_add(a: &U256, b: &U256) -> (U256, bool) {
@@ -163,6 +179,26 @@ pub fn u256_to_be_bytes(a: &U256) -> Vec<u8> {
         ret.write_u64::<BigEndian>(a[i]).unwrap();
     }
     ret
+}
+
+#[inline(always)]
+pub fn u256_to_bits(a: U256) -> [char; 256] {
+    let mut bits = ['0'; 256]; // 初始化长度为 256 的字符数组，默认值为 '0'
+    let mut index = 0;
+    for i in (0..4).rev() {
+        // 遍历 4 个 u64 元素，倒序访问
+        let mut w = a[i];
+        for _ in 0..64 {
+            bits[index] = if (w & 0x8000_0000_0000_0000) != 0 {
+                '1'
+            } else {
+                '0'
+            };
+            w <<= 1;
+            index += 1;
+        }
+    }
+    bits
 }
 
 #[inline(always)]

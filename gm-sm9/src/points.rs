@@ -1,8 +1,8 @@
-use crate::fields::fp::Fp;
+use crate::fields::fp::{fp_from_hex, Fp};
 use crate::fields::fp2::Fp2;
 use crate::fields::FieldElement;
 use crate::sm9_p256_table::SM9_P256_PRECOMPUTED;
-use crate::u256::{sm9_u256_get_booth, u256_cmp, u256_to_be_bytes, SM9_ZERO, U256};
+use crate::u256::{sm9_u256_get_booth, u256_cmp, u256_to_bits, SM9_ZERO, U256};
 
 #[derive(Copy, Debug, Clone)]
 pub struct Point {
@@ -13,9 +13,9 @@ pub struct Point {
 
 #[derive(Copy, Debug, Clone)]
 pub struct TwistPoint {
-    x: Fp2,
-    y: Fp2,
-    z: Fp2,
+    pub(crate) x: Fp2,
+    pub(crate) y: Fp2,
+    pub(crate) z: Fp2,
 }
 
 // 群 G1的生成元 P1 = (xP1 , yP1);
@@ -82,7 +82,7 @@ const G2: TwistPoint = TwistPoint {
     },
 };
 
-const SM9_U256_Ppubs: TwistPoint = TwistPoint {
+pub const SM9_U256_PPUBS: TwistPoint = TwistPoint {
     x: Fp2 {
         c0: [
             0x8F14D65696EA5E32,
@@ -162,6 +162,14 @@ const SM9_U256_MONT_G2: TwistPoint = TwistPoint {
 };
 
 impl Point {
+    pub fn from_hex(data: [&str; 2]) -> Self {
+        Self {
+            x: fp_from_hex(&data[0]),
+            y: fp_from_hex(&data[1]),
+            z: Fp::one(),
+        }
+    }
+
     pub fn zero() -> Self {
         Self {
             x: Fp::one(),
@@ -422,12 +430,40 @@ impl Point {
 }
 
 impl TwistPoint {
+    pub fn from_hex(x_data: [&str; 2], y_data: [&str; 2]) -> Self {
+        Self {
+            x: Fp2::from_hex(x_data),
+            y: Fp2::from_hex(y_data),
+            z: Fp2::one(),
+        }
+    }
+
     pub fn zero() -> Self {
         Self {
             x: Fp2::one(),
             y: Fp2::one(),
             z: Fp2::zero(),
         }
+    }
+
+    pub fn point_equals(&self, rhs: &Self) -> bool {
+        let (mut t1, mut t2, mut t3, mut t4) = (Fp2::zero(), Fp2::zero(), Fp2::zero(), Fp2::zero());
+
+        t1 = self.z.fp_sqr();
+        t2 = rhs.z.fp_sqr();
+        t3 = self.x.fp_mul(&t2);
+        t4 = rhs.x.fp_mul(&t1);
+
+        if t3.eq(&t4) {
+            return true;
+        }
+
+        t1 = t1.fp_mul(&self.z);
+        t2 = t2.fp_mul(&rhs.z);
+
+        t3 = self.y.fp_mul(&t2);
+        t4 = rhs.y.fp_mul(&t1);
+        t3.eq(&t4)
     }
 
     pub fn point_double(&self) -> Self {
@@ -488,11 +524,11 @@ impl TwistPoint {
         t2 = t2.fp_sub(&y1);
 
         if t1.is_zero() {
-            if t2.is_zero() {
-                return rhs.point_double();
-            }
-        } else {
-            return TwistPoint::zero();
+            return if t2.is_zero() {
+                rhs.point_double()
+            } else {
+                TwistPoint::zero()
+            };
         }
 
         let mut z3 = z1.fp_mul(&t1);
@@ -529,11 +565,11 @@ impl TwistPoint {
     }
 
     pub fn point_mul(&self, k: &U256) -> Self {
-        let kbits = u256_to_be_bytes(k);
+        let bits = u256_to_bits(*k);
         let mut r = TwistPoint::zero();
         for i in 0..256 {
             r = r.point_double();
-            if kbits[i] & 0x1 == 1 {
+            if bits[i] == '1' {
                 r = twist_point_add_full(&r, self)
             }
         }
@@ -604,10 +640,7 @@ fn twist_point_add_full(p1: &TwistPoint, p2: &TwistPoint) -> TwistPoint {
 
 #[cfg(test)]
 mod test_point_operation {
-    use crate::fields::fp::{fp_to_mont, Fp};
-    use crate::fields::fp2::Fp2;
-    use crate::fields::FieldElement;
-    use crate::points::{Point, TwistPoint};
+    use crate::points::{twist_point_add_full, Point, TwistPoint, SM9_U256_MONT_G2};
     use crate::u256::u256_from_be_bytes;
 
     #[test]
@@ -617,176 +650,250 @@ mod test_point_operation {
                 .unwrap(),
         );
         let r = Point::g_mul(&k);
-
-        let ret = Point {
-            x: fp_to_mont(&u256_from_be_bytes(
-                &hex::decode("7cf689748f3714490d7a19eae0e7bfad0e0182498b7bcd8a6998dfd00f59be51")
-                    .unwrap(),
-            )),
-            y: fp_to_mont(&u256_from_be_bytes(
-                &hex::decode("4e2e98d190e9d775e0caa943196bfb066d9c30818b2d768fb5299e7135830a6f")
-                    .unwrap(),
-            )),
-            z: Fp::one(),
-        };
+        let ret = Point::from_hex([
+            "7cf689748f3714490d7a19eae0e7bfad0e0182498b7bcd8a6998dfd00f59be51",
+            "4e2e98d190e9d775e0caa943196bfb066d9c30818b2d768fb5299e7135830a6f",
+        ]);
         assert_eq!(true, r.point_equals(&ret));
     }
 
     #[test]
     fn test_point_add() {
-        let p1 = Point {
-            x: fp_to_mont(&u256_from_be_bytes(
-                &hex::decode("917be49d159184fba140f4dfc5d653464e94f718fe195b226b3f715829e6e768")
-                    .unwrap(),
-            )),
-            y: fp_to_mont(&u256_from_be_bytes(
-                &hex::decode("288578d9505d462867a50acee40ee143b896e72505be10e8ce4c6b0c945b642b")
-                    .unwrap(),
-            )),
-            z: Fp::one(),
-        };
+        let p = Point::from_hex([
+            "917be49d159184fba140f4dfc5d653464e94f718fe195b226b3f715829e6e768",
+            "288578d9505d462867a50acee40ee143b896e72505be10e8ce4c6b0c945b642b",
+        ]);
 
-        let p2 = Point {
-            x: fp_to_mont(&u256_from_be_bytes(
-                &hex::decode("593417680f252445fd0522383e23c77a54b11fe222de4a886eabc26e16bffa3c")
-                    .unwrap(),
-            )),
-            y: fp_to_mont(&u256_from_be_bytes(
-                &hex::decode("38e8fc9a8b60f5ba0c6c411f721c117044435a833757d8fee65828511b8b245d")
-                    .unwrap(),
-            )),
-            z: Fp::one(),
-        };
+        let q = Point::from_hex([
+            "593417680f252445fd0522383e23c77a54b11fe222de4a886eabc26e16bffa3c",
+            "38e8fc9a8b60f5ba0c6c411f721c117044435a833757d8fee65828511b8b245d",
+        ]);
 
-        let ret = Point {
-            x: fp_to_mont(&u256_from_be_bytes(
-                &hex::decode("056610cb69f8d5659ea94e4a67bbf3b93fb0bd449672d7ca2525ec3b68c894d1")
-                    .unwrap(),
-            )),
-            y: fp_to_mont(&u256_from_be_bytes(
-                &hex::decode("88f3f99ce78ed3ffe6ca1cface5242570cb5d053f16a8e0baae10414babd86a7")
-                    .unwrap(),
-            )),
-            z: Fp::one(),
-        };
+        let ret = Point::from_hex([
+            "056610cb69f8d5659ea94e4a67bbf3b93fb0bd449672d7ca2525ec3b68c894d1",
+            "88f3f99ce78ed3ffe6ca1cface5242570cb5d053f16a8e0baae10414babd86a7",
+        ]);
 
-        let r = p1.point_add(&p2);
+        let r = p.point_add(&q);
         assert_eq!(true, r.point_equals(&ret));
     }
 
     #[test]
     fn test_point_dbl() {
-        let p = Point {
-            x: fp_to_mont(&u256_from_be_bytes(
-                &hex::decode("917be49d159184fba140f4dfc5d653464e94f718fe195b226b3f715829e6e768")
-                    .unwrap(),
-            )),
-            y: fp_to_mont(&u256_from_be_bytes(
-                &hex::decode("288578d9505d462867a50acee40ee143b896e72505be10e8ce4c6b0c945b642b")
-                    .unwrap(),
-            )),
-            z: Fp::one(),
-        };
+        let p = Point::from_hex([
+            "917be49d159184fba140f4dfc5d653464e94f718fe195b226b3f715829e6e768",
+            "288578d9505d462867a50acee40ee143b896e72505be10e8ce4c6b0c945b642b",
+        ]);
 
         let r = p.point_double();
-        let ret = Point {
-            x: fp_to_mont(&u256_from_be_bytes(
-                &hex::decode("268def7968f1e8c51635e277425403df88355fb2ecf16f7920f112eb2a7e50c9")
-                    .unwrap(),
-            )),
-            y: fp_to_mont(&u256_from_be_bytes(
-                &hex::decode("5c596b534bbaa85c1d3aecf436e61ff1bfd9f70856f0309c2a63d8248205d84e")
-                    .unwrap(),
-            )),
-            z: Fp::one(),
-        };
+        let ret = Point::from_hex([
+            "268def7968f1e8c51635e277425403df88355fb2ecf16f7920f112eb2a7e50c9",
+            "5c596b534bbaa85c1d3aecf436e61ff1bfd9f70856f0309c2a63d8248205d84e",
+        ]);
         assert_eq!(true, r.point_equals(&ret));
     }
 
     #[test]
     fn test_point_sub() {
-        let p1 = Point {
-            x: fp_to_mont(&u256_from_be_bytes(
-                &hex::decode("917be49d159184fba140f4dfc5d653464e94f718fe195b226b3f715829e6e768")
-                    .unwrap(),
-            )),
-            y: fp_to_mont(&u256_from_be_bytes(
-                &hex::decode("288578d9505d462867a50acee40ee143b896e72505be10e8ce4c6b0c945b642b")
-                    .unwrap(),
-            )),
-            z: Fp::one(),
-        };
+        let p = Point::from_hex([
+            "917be49d159184fba140f4dfc5d653464e94f718fe195b226b3f715829e6e768",
+            "288578d9505d462867a50acee40ee143b896e72505be10e8ce4c6b0c945b642b",
+        ]);
 
-        let p2 = Point {
-            x: fp_to_mont(&u256_from_be_bytes(
-                &hex::decode("593417680f252445fd0522383e23c77a54b11fe222de4a886eabc26e16bffa3c")
-                    .unwrap(),
-            )),
-            y: fp_to_mont(&u256_from_be_bytes(
-                &hex::decode("38e8fc9a8b60f5ba0c6c411f721c117044435a833757d8fee65828511b8b245d")
-                    .unwrap(),
-            )),
-            z: Fp::one(),
-        };
+        let q = Point::from_hex([
+            "593417680f252445fd0522383e23c77a54b11fe222de4a886eabc26e16bffa3c",
+            "38e8fc9a8b60f5ba0c6c411f721c117044435a833757d8fee65828511b8b245d",
+        ]);
 
-        let ret = Point {
-            x: fp_to_mont(&u256_from_be_bytes(
-                &hex::decode("29e4a54cad98da9939b95f677784bff3b1dd9334c83d93e351e0f8f7c4ce2dc5")
-                    .unwrap(),
-            )),
-            y: fp_to_mont(&u256_from_be_bytes(
-                &hex::decode("4473eba3b8ff990b8456c41ec0727b76cb2b0f960495b144949f70bf95643b82")
-                    .unwrap(),
-            )),
-            z: Fp::one(),
-        };
-
-        let r = p1.point_sub(&p2);
+        let ret = Point::from_hex([
+            "29e4a54cad98da9939b95f677784bff3b1dd9334c83d93e351e0f8f7c4ce2dc5",
+            "4473eba3b8ff990b8456c41ec0727b76cb2b0f960495b144949f70bf95643b82",
+        ]);
+        let r = p.point_sub(&q);
         assert_eq!(true, r.point_equals(&ret));
     }
 
     #[test]
     fn test_point_neg() {
-        let p = Point {
-            x: fp_to_mont(&u256_from_be_bytes(
-                &hex::decode("917be49d159184fba140f4dfc5d653464e94f718fe195b226b3f715829e6e768")
-                    .unwrap(),
-            )),
-            y: fp_to_mont(&u256_from_be_bytes(
-                &hex::decode("288578d9505d462867a50acee40ee143b896e72505be10e8ce4c6b0c945b642b")
-                    .unwrap(),
-            )),
-            z: Fp::one(),
-        };
-
+        let p = Point::from_hex([
+            "917be49d159184fba140f4dfc5d653464e94f718fe195b226b3f715829e6e768",
+            "288578d9505d462867a50acee40ee143b896e72505be10e8ce4c6b0c945b642b",
+        ]);
         let r = p.point_neg();
-        let ret = Point {
-            x: fp_to_mont(&u256_from_be_bytes(
-                &hex::decode("917be49d159184fba140f4dfc5d653464e94f718fe195b226b3f715829e6e768")
-                    .unwrap(),
-            )),
-            y: fp_to_mont(&u256_from_be_bytes(
-                &hex::decode("8dba8726b24660c96e5ea081117fe601695bac2614bcddf31723301b4ef5e152")
-                    .unwrap(),
-            )),
-            z: Fp::one(),
-        };
+        let ret = Point::from_hex([
+            "917be49d159184fba140f4dfc5d653464e94f718fe195b226b3f715829e6e768",
+            "8dba8726b24660c96e5ea081117fe601695bac2614bcddf31723301b4ef5e152",
+        ]);
         assert_eq!(true, r.point_equals(&ret));
     }
 
     #[test]
     fn test_point_mul() {
-        let p = Point {
-            x: fp_to_mont(&u256_from_be_bytes(
-                &hex::decode("917be49d159184fba140f4dfc5d653464e94f718fe195b226b3f715829e6e768")
-                    .unwrap(),
-            )),
-            y: fp_to_mont(&u256_from_be_bytes(
-                &hex::decode("288578d9505d462867a50acee40ee143b896e72505be10e8ce4c6b0c945b642b")
-                    .unwrap(),
-            )),
-            z: Fp::one(),
-        };
+        let p = Point::from_hex([
+            "917be49d159184fba140f4dfc5d653464e94f718fe195b226b3f715829e6e768",
+            "288578d9505d462867a50acee40ee143b896e72505be10e8ce4c6b0c945b642b",
+        ]);
+        let k = u256_from_be_bytes(
+            &hex::decode("123456789abcdef00fedcba987654321123456789abcdef00fedcba987654321")
+                .unwrap(),
+        );
+        let r = p.point_mul(&k);
+        let ret = Point::from_hex([
+            "997fcff625adbae62566f684f9e89181713f972c5a9cd9ce6764636761ba87d1",
+            "8142a28d1bd109501452a649e2d68f012e265460e0c7d3da743fb036eb23b03b",
+        ]);
+        assert_eq!(true, r.point_equals(&ret));
+    }
+
+    #[test]
+    fn test_twist_point_dbl() {
+        let p = TwistPoint::from_hex(
+            [
+                "9a79bfd491ef1cb32d9b57f7d0590ccff6b1cfe63dd15c0823d692fafbe96dbc",
+                "83f6a65d85d51ec72eacf19bc38384e0369eb22a134a725a0191faa6e4f192ef",
+            ],
+            [
+                "849d4434eb7113fc9fb3809b51d54064fa2f20503423d256bc044905b1eba3fb",
+                "9ed11c499291db0454d738555af0ce8a1df960056ee7425a6bf296eae60a5037",
+            ],
+        );
+
+        let r = p.point_double();
+
+        let ret = TwistPoint::from_hex(
+            [
+                "58400f0eb23000d814f5b5d0706749a72909795b7b04f26d6d58b2cf478ad9c9",
+                "73cbced58a8e76ef5235b480050a74e906e4d27185bd85d7ebdcd43ad24475fd",
+            ],
+            [
+                "19b460e09ac9ddbb380d6441e078a47bfcaa7d4c3d60b3a6c0d05f896472dc3c",
+                "1d69f785f47d6f25cb901b131612c37edc5e89ee9ba2dac8c401ced40e340a39",
+            ],
+        );
+        assert_eq!(true, r.point_equals(&ret))
+    }
+
+    #[test]
+    fn test_twist_point_neg() {
+        let p = TwistPoint::from_hex(
+            [
+                "9a79bfd491ef1cb32d9b57f7d0590ccff6b1cfe63dd15c0823d692fafbe96dbc",
+                "83f6a65d85d51ec72eacf19bc38384e0369eb22a134a725a0191faa6e4f192ef",
+            ],
+            [
+                "849d4434eb7113fc9fb3809b51d54064fa2f20503423d256bc044905b1eba3fb",
+                "9ed11c499291db0454d738555af0ce8a1df960056ee7425a6bf296eae60a5037",
+            ],
+        );
+
+        let r = p.point_neg();
+
+        let ret = TwistPoint::from_hex(
+            [
+                "9a79bfd491ef1cb32d9b57f7d0590ccff6b1cfe63dd15c0823d692fafbe96dbc",
+                "83f6a65d85d51ec72eacf19bc38384e0369eb22a134a725a0191faa6e4f192ef",
+            ],
+            [
+                "31a2bbcb173292f536502ab4a3b986e027c372fae6571c85296b52223165a182",
+                "176ee3b67011cbed812c72fa9a9df8bb03f93345ab93ac81797d043cfd46f546",
+            ],
+        );
+        assert_eq!(true, r.point_equals(&ret))
+    }
+
+    #[test]
+    fn test_twist_point_add() {
+        let p = TwistPoint::from_hex(
+            [
+                "9a79bfd491ef1cb32d9b57f7d0590ccff6b1cfe63dd15c0823d692fafbe96dbc",
+                "83f6a65d85d51ec72eacf19bc38384e0369eb22a134a725a0191faa6e4f192ef",
+            ],
+            [
+                "849d4434eb7113fc9fb3809b51d54064fa2f20503423d256bc044905b1eba3fb",
+                "9ed11c499291db0454d738555af0ce8a1df960056ee7425a6bf296eae60a5037",
+            ],
+        );
+
+        let q = TwistPoint::from_hex(
+            [
+                "624b19114e49f00281e2aee1f1b9d4f0a081a135868f8bbdb7b7a7b7da5fd6bc",
+                "a36232a9713f69157b7cdceef54aa0237b3ba0642a80dbb597af8935aea2c130",
+            ],
+            [
+                "1be45454b6fa085a53744b22fd398238e400c3e031c8796e59e1bd6222048af0",
+                "77966917ec1c5a294dd836c34691ab5e891f8c9f017443902c0a73ec54d449d8",
+            ],
+        );
+
+        let r = p.point_add(&q);
+
+        let r1 = twist_point_add_full(&p, &q);
+
+        let ret = TwistPoint::from_hex(
+            [
+                "a411bbd84ee92a6ee53e5ca9cb81bacc192c6ba406f6fdcb2b04d0ab9c42ae44",
+                "5f443752a19e368f404b89abae20a386d2b534c424b93ededdbfd04d4c569e6b",
+            ],
+            [
+                "4fa25e5e6100a023d4923df385dd236749c6a7f8e68db55e0bd1e2263fc04d28",
+                "6a3dadfcaac134e8353dd3abf37d487b206ca28dfab1e0a9376649df748f1605",
+            ],
+        );
+        assert_eq!(true, r.point_equals(&ret));
+        assert_eq!(true, r1.point_equals(&ret))
+    }
+
+    #[test]
+    fn test_twist_point_sub() {
+        let p = TwistPoint::from_hex(
+            [
+                "9a79bfd491ef1cb32d9b57f7d0590ccff6b1cfe63dd15c0823d692fafbe96dbc",
+                "83f6a65d85d51ec72eacf19bc38384e0369eb22a134a725a0191faa6e4f192ef",
+            ],
+            [
+                "849d4434eb7113fc9fb3809b51d54064fa2f20503423d256bc044905b1eba3fb",
+                "9ed11c499291db0454d738555af0ce8a1df960056ee7425a6bf296eae60a5037",
+            ],
+        );
+
+        let q = TwistPoint::from_hex(
+            [
+                "624b19114e49f00281e2aee1f1b9d4f0a081a135868f8bbdb7b7a7b7da5fd6bc",
+                "a36232a9713f69157b7cdceef54aa0237b3ba0642a80dbb597af8935aea2c130",
+            ],
+            [
+                "1be45454b6fa085a53744b22fd398238e400c3e031c8796e59e1bd6222048af0",
+                "77966917ec1c5a294dd836c34691ab5e891f8c9f017443902c0a73ec54d449d8",
+            ],
+        );
+
+        let r = p.point_sub(&q);
+
+        let ret = TwistPoint::from_hex(
+            [
+                "1e9c3c99524c7867c9dbc4f52fdc938cf5aa4a980d3905cc91a5b91331235290",
+                "3cbbf5fcc6c11a3579036e617bbf0b2861c53979f01e37f59fc4a10d991ccde7",
+            ],
+            [
+                "47a4037d1d6f6d2014aa04292fa91cf07b1f4331a85d4b66a6e048226ddfc43e",
+                "44027c5d814bab73ad93d14b564303aab153ad7355bcfbf8a8bed7cb577e7fd8",
+            ],
+        );
+        assert_eq!(true, r.point_equals(&ret))
+    }
+
+    #[test]
+    fn test_twist_point_mul() {
+        let p = TwistPoint::from_hex(
+            [
+                "9a79bfd491ef1cb32d9b57f7d0590ccff6b1cfe63dd15c0823d692fafbe96dbc",
+                "83f6a65d85d51ec72eacf19bc38384e0369eb22a134a725a0191faa6e4f192ef",
+            ],
+            [
+                "849d4434eb7113fc9fb3809b51d54064fa2f20503423d256bc044905b1eba3fb",
+                "9ed11c499291db0454d738555af0ce8a1df960056ee7425a6bf296eae60a5037",
+            ],
+        );
 
         let k = u256_from_be_bytes(
             &hex::decode("123456789abcdef00fedcba987654321123456789abcdef00fedcba987654321")
@@ -794,57 +901,37 @@ mod test_point_operation {
         );
 
         let r = p.point_mul(&k);
-
-        let ret = Point {
-            x: fp_to_mont(&u256_from_be_bytes(
-                &hex::decode("997fcff625adbae62566f684f9e89181713f972c5a9cd9ce6764636761ba87d1")
-                    .unwrap(),
-            )),
-            y: fp_to_mont(&u256_from_be_bytes(
-                &hex::decode("8142a28d1bd109501452a649e2d68f012e265460e0c7d3da743fb036eb23b03b")
-                    .unwrap(),
-            )),
-            z: Fp::one(),
-        };
-        assert_eq!(true, r.point_equals(&ret));
+        let ret = TwistPoint::from_hex(
+            [
+                "705c9ca4b5ef465c4e5db80ca4880627a6d9d6bcefd4756496baba9d5eaa3304",
+                "5d704de3261290dbba39dbd14e6bc416025240fd1ed65ec982efed685ae41e8b",
+            ],
+            [
+                "5d7ba50d7eac49a00b18fee2069afd3cc9719993fa78271e66b7a3efed46ac8b",
+                "4e96eb3543aabf1e9a65cae24177b9d13b0f7fae9472145ba7ae2b14bb447aef",
+            ],
+        );
+        assert_eq!(true, r.point_equals(&ret))
     }
 
     #[test]
-    fn test_twist_point_add() {
-        let p = TwistPoint {
-            x: Fp2 {
-                c0: fp_to_mont(&u256_from_be_bytes(
-                    &hex::decode(
-                        "9a79bfd491ef1cb32d9b57f7d0590ccff6b1cfe63dd15c0823d692fafbe96dbc",
-                    )
-                    .unwrap(),
-                )),
-                c1: fp_to_mont(&u256_from_be_bytes(
-                    &hex::decode(
-                        "83f6a65d85d51ec72eacf19bc38384e0369eb22a134a725a0191faa6e4f192ef",
-                    )
-                    .unwrap(),
-                )),
-            },
-            y: Fp2 {
-                c0: fp_to_mont(&u256_from_be_bytes(
-                    &hex::decode(
-                        "849d4434eb7113fc9fb3809b51d54064fa2f20503423d256bc044905b1eba3fb",
-                    )
-                    .unwrap(),
-                )),
-                c1: fp_to_mont(&u256_from_be_bytes(
-                    &hex::decode(
-                        "9ed11c499291db0454d738555af0ce8a1df960056ee7425a6bf296eae60a5037",
-                    )
-                    .unwrap(),
-                )),
-            },
-            z: Fp2::one(),
-        };
+    fn test_twist_point_g_mul() {
+        let k = u256_from_be_bytes(
+            &hex::decode("123456789abcdef00fedcba987654321123456789abcdef00fedcba987654321")
+                .unwrap(),
+        );
 
-        let r = p.point_double();
-
-        println!("{:?}", p)
+        let r = SM9_U256_MONT_G2.point_mul(&k);
+        let ret = TwistPoint::from_hex(
+            [
+                "1f97dd359f2b065d63e0987f5bea2f3dc865c2cc112d7d161b46b83451716fd8",
+                "920ef6fb3a2acff52aa0c004c18feca149dfd33d98086f8f402ea9e0de303c49",
+            ],
+            [
+                "18a22e02b7d395a49f0646a79438e79cd37c32f163fe8923c13d56bab668e8a7",
+                "614881d4d05fef3173a4990465876c5200f58c5015e13354b23ae401c20c4aef",
+            ],
+        );
+        assert_eq!(true, r.point_equals(&ret))
     }
 }

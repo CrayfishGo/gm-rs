@@ -249,7 +249,7 @@ impl FieldElement for Fp {
 }
 
 pub fn fp_from_hex(hex: &str) -> Fp {
-    u256_from_be_bytes(&hex::decode(hex).unwrap())
+    fp_to_mont(&u256_from_be_bytes(&hex::decode(hex).unwrap()))
 }
 
 #[cfg(test)]

@@ -1,13 +1,12 @@
+use crate::u256::{u256_add, u256_cmp, u256_from_be_bytes, u256_mul, u256_sub, SM9_ONE, U256};
+use rand::RngCore;
 use std::fmt::Debug;
 use std::ops::{Add, Mul, MulAssign, Neg, Sub};
-use rand::RngCore;
-use crate::u256::{SM9_ONE, U256, u256_add, u256_cmp, u256_from_be_bytes, u256_mul, u256_sub};
 
 pub mod fp;
 pub(crate) mod fp12;
 pub(crate) mod fp2;
 pub(crate) mod fp4;
-
 
 pub trait FieldElement: Sized + Copy + Clone + PartialEq + Eq + Debug {
     fn zero() -> Self;
@@ -23,9 +22,6 @@ pub trait FieldElement: Sized + Copy + Clone + PartialEq + Eq + Debug {
     fn fp_div2(&self) -> Self;
     fn fp_inv(&self) -> Self;
 }
-
-
-
 
 /// 群的阶 N(t) = 36t^4 + 36t^3 + 18t^2 + 6t + 1
 ///
@@ -46,7 +42,7 @@ const SM9_N_NEG: U256 = [
 ];
 
 /// N - 1
-const SM9_N_MINUS_ONE: U256 = [
+pub const SM9_N_MINUS_ONE: U256 = [
     0xe56ee19cd69ecf24,
     0x49f2934b18ea8bee,
     0xd603ab4ff58ec744,
@@ -67,6 +63,13 @@ const SM9_N_BARRETT_MU: [u64; 5] = [
     0x55f73aebdcd1312c,
     0x67980e0beb5759a6,
     0x1,
+];
+
+pub const SM9_Z256_N_MINUS_ONE_BARRETT_MU: [u64; 4] = [
+    0x74df4fd4dfc97c31,
+    0x9c95d85ec9c073b0,
+    0x55f73aebdcd1312c,
+    0x67980e0beb5759a6,
 ];
 
 #[inline(always)]
@@ -144,33 +147,35 @@ pub fn mod_n_mul(a: &U256, b: &U256) -> U256 {
     let z1: [u64; 5] = [z[3], z[4], z[5], z[6], z[7]];
     let h = u320_mul(&z1, &SM9_N_BARRETT_MU);
 
-    // (h // 2^320) = h[6-9]
-    let h1: [u64; 4] = [h[6], h[7], h[8], h[9]];
+    // (h // 2^320) = h[5-9]
+    let h1: [u64; 4] = [h[5], h[6], h[7], h[8]];
     let mut s = u256_mul(&h1, &SM9_N);
 
     s[4] += SM9_N[0] * h[9];
 
-    let mut t = z[0] - s[0];
-    let mut c = (t > z[0]) as u64;
-    r[0] = t;
+    let mut carry = 0;
+    let (t0, overflow) = z[0].overflowing_sub(s[0]);
+    r[0] = t0;
+    carry = overflow as u64;
 
-    t = z[1] - c;
-    c = (t > z[1]) as u64;
-    r[1] = t - s[1];
-    c += (r[1] > t) as u64;
+    let (t1, overflow) = z[1].overflowing_sub(carry);
+    let (t1, overflow2) = t1.overflowing_sub(s[1]);
+    r[1] = t1;
+    carry = (overflow || overflow2) as u64;
 
-    t = z[2] - c;
-    c = (t > z[2]) as u64;
-    r[2] = t - s[2];
-    c += (r[2] > t) as u64;
+    let (t2, overflow) = z[2].overflowing_sub(carry);
+    let (t2, overflow2) = t2.overflowing_sub(s[2]);
+    r[2] = t2;
+    carry = (overflow || overflow2) as u64;
 
-    t = z[3] - c;
-    c = (t > z[3]) as u64;
-    r[3] = t - s[3];
-    c += (r[3] > t) as u64;
+    let (t3, overflow) = z[3].overflowing_sub(carry);
+    let (t3, overflow2) = t3.overflowing_sub(s[3]);
+    r[3] = t3;
+    carry = (overflow || overflow2) as u64;
 
-    t = z[4] - c;
-    s[4] = t - s[4];
+    // s[4] holds the temporary value for r[4]
+    let (t4, overflow) = z[4].overflowing_sub(carry);
+    s[4] = t4.wrapping_sub(s[4]);
 
     if s[4] > 0 || u256_cmp(&r, &SM9_N) >= 0 {
         r = u256_sub(&r, &SM9_N).0;
@@ -180,10 +185,9 @@ pub fn mod_n_mul(a: &U256, b: &U256) -> U256 {
 
 pub fn mod_n_pow(a: &U256, e: &U256) -> U256 {
     let mut r = SM9_ONE;
-    let mut w = 0u64;
     for i in (0..4).rev() {
-        w = e[i];
-        for j in 0..64 {
+        let mut w = e[i];
+        for _ in 0..64 {
             r = mod_n_mul(&r, &r);
             if w & 0x8000000000000000 != 0 {
                 r = mod_n_mul(&r, a);
@@ -195,5 +199,37 @@ pub fn mod_n_pow(a: &U256, e: &U256) -> U256 {
 }
 
 pub fn mod_n_inv(a: &U256) -> U256 {
-    mod_n_pow(a, &SM9_N_MINUS_ONE)
+    mod_n_pow(a, &SM9_N_MINUS_TWO)
+}
+
+pub fn mod_n_from_hash(ha: &[u8]) -> U256 {
+    let mut h = SM9_ONE;
+    let mut z: [u64; 5] = [0; 5];
+    for i in 0..5 {
+        z[4 - i] = getu64(&ha[8 * i..]);
+    }
+
+    let mut c = false;
+    let mut t = 0_u64;
+    let z1 = [z[3], z[4], 0, 0];
+    let mut r = u256_mul(&z1, &SM9_Z256_N_MINUS_ONE_BARRETT_MU);
+
+    r[4] += z[3];
+    c = r[4] < z[3];
+    t = z[4] + (c as u64);
+    c = t < z[4];
+    r[5] += t;
+    c = r[5] < t;
+    r[6] = u64::from(c);
+
+    r = u256_mul(&[r[5], r[6], 0, 0], &SM9_N_MINUS_ONE);
+    h = u256_sub(&[z[0], z[1], z[2], z[3]], &[r[0], r[1], r[2], r[3]]).0;
+    h = mod_n_add(&h, &SM9_ONE);
+    h
+}
+
+fn getu64(bytes: &[u8]) -> u64 {
+    let mut arr = [0u8; 8];
+    arr.copy_from_slice(&bytes[..8]);
+    u64::from_be_bytes(arr)
 }
