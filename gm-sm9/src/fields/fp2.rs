@@ -7,7 +7,6 @@ pub struct Fp2 {
     pub(crate) c1: Fp,
 }
 
-
 impl Fp2 {
     pub(crate) fn fp_mul_fp(&self, k: &Fp) -> Fp2 {
         Fp2 {
@@ -15,7 +14,6 @@ impl Fp2 {
             c1: self.c1.fp_mul(k),
         }
     }
-
 }
 
 impl PartialEq for Fp2 {
@@ -208,26 +206,32 @@ impl Fp2 {
     }
 
     pub(crate) fn fp_mul_u(&self, rhs: &Self) -> Self {
-        let mut r0 = Fp::zero();
-        let mut r1 = Fp::zero();
-        let mut t = Fp::zero();
+        let mut t0 = Fp::zero();
+        let mut t1 = Fp::zero();
+        let mut t2 = Fp::zero();
 
-        // r0 = -2 * (a0 * b1 + a1 * b0)
-        r0 = self.c0.fp_mul(&rhs.c1);
-        t = self.c1.fp_mul(&rhs.c0);
-        r0 = r0.fp_add(&t);
-        r0 = r0.fp_double();
-        r0 = r0.fp_neg();
+        // t2 = (a0 + a1) * (b0 + b1)
+        t0 = self.c0.fp_add(&self.c1);
+        t1 = rhs.c0.fp_add(&rhs.c1);
+        t2 = t0.fp_mul(&t1);
 
-        // r1 = a0 * b0 - 2 * a1 * b1
-        r1 = self.c0.fp_mul(&rhs.c0);
-        t = self.c1.fp_mul(&rhs.c1);
-        t = t.fp_double();
-        r1 = r1.fp_sub(&t);
+        // t0 = a0 * b0
+        t0 = self.c0.fp_mul(&rhs.c0);
 
-        Self { c0: r0, c1: r1 }
+        // t1 = a1 * b1
+        t1 = self.c1.fp_mul(&rhs.c1);
+
+        // r0 = -2 *(t2 - t0 - t1) = -2 * (a0 * b1 + a1 * b0)
+        t2 = t2.fp_sub(&t0);
+        t2 = t2.fp_sub(&t1);
+        t2 = t2.fp_double();
+        t2 = t2.fp_neg();
+
+        // r1 = t0 - 2*t1 = a0 * b0 - 2(a1 * b1)
+        t0 = t0.fp_sub(&t1.fp_double());
+
+        Self { c0: t2, c1: t0 }
     }
-
 
     pub(crate) fn sqr_u(&self) -> Self {
         let mut r: Fp2 = Fp2::zero();

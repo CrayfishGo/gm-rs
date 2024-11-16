@@ -1,10 +1,7 @@
 use crate::fields::{mod_n_add, mod_n_from_hash, mod_n_inv, mod_n_mul, FieldElement};
 use crate::points::{sm9_u256_pairing, Point, TwistPoint};
 use crate::u256::{sm9_random_u256, xor, U256};
-use crate::{
-    SM9_HASH1_PREFIX, SM9_HID_ENC, SM9_HID_SIGN, SM9_N_MINUS_ONE, SM9_POINT_MONT_P1,
-    SM9_TWIST_POINT_MONT_P2,
-};
+use crate::{kdf, SM9_HASH1_PREFIX, SM9_HID_ENC, SM9_HID_SIGN, SM9_N_MINUS_ONE, SM9_POINT_MONT_P1, SM9_TWIST_POINT_MONT_P2};
 use gm_sm3::sm3_hash;
 
 #[derive(Copy, Debug, Clone)]
@@ -35,7 +32,7 @@ impl Sm9EncMasterKey {
         let mut c1 = SM9_POINT_MONT_P1.point_mul(&t);
         c1 = c1.point_add(&self.ppube);
 
-        let mut k = [0u8; 32];
+        let mut k = vec![];
         loop {
             // A2: rand r in [1, N-1]
             let r = sm9_random_u256(&SM9_N_MINUS_ONE);
@@ -56,8 +53,8 @@ impl Sm9EncMasterKey {
             k_append.extend_from_slice(&c1.y.to_bytes_be());
             k_append.extend_from_slice(&g.to_bytes_be());
             k_append.extend_from_slice(idb);
-            k = sm3_hash(&k_append);
-            fn is_zero(x: &[u8; 32]) -> bool {
+            k = kdf(&k_append, (255 + 32) as usize);
+            fn is_zero(x: &Vec<u8>) -> bool {
                 x.iter().all(|&byte| byte == 0)
             }
 
