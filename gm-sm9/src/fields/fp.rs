@@ -51,7 +51,7 @@ pub fn fp_from_mont(a: &Fp) -> Fp {
 }
 
 
-pub(crate) fn fp_from_bytes(buf: &[u8; 32]) -> Fp {
+pub(crate) fn fp_from_bytes(buf: &[u8]) -> Fp {
     let mut t = u256_from_be_bytes(buf);
     t = fp_to_mont(&t);
     t
@@ -177,7 +177,8 @@ impl FieldElement for Fp {
     }
 
     fn to_bytes_be(&self) -> Vec<u8> {
-        u256_to_be_bytes(&fp_from_mont(self))
+        let z = fp_from_mont(self);
+        u256_to_be_bytes(&z)
     }
 }
 

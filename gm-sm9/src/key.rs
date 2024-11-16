@@ -1,8 +1,13 @@
+use crate::error::{Sm9Error, Sm9Result};
 use crate::fields::{mod_n_add, mod_n_from_hash, mod_n_inv, mod_n_mul, FieldElement};
 use crate::points::{sm9_u256_pairing, Point, TwistPoint};
 use crate::u256::{sm9_random_u256, xor, U256};
-use crate::{kdf, SM9_HASH1_PREFIX, SM9_HID_ENC, SM9_HID_SIGN, SM9_N_MINUS_ONE, SM9_POINT_MONT_P1, SM9_TWIST_POINT_MONT_P2};
+use crate::{
+    kdf, SM9_HASH1_PREFIX, SM9_HID_ENC, SM9_HID_SIGN, SM9_N_MINUS_ONE, SM9_POINT_MONT_P1,
+    SM9_TWIST_POINT_MONT_P2,
+};
 use gm_sm3::sm3_hash;
+use std::error::Error;
 
 #[derive(Copy, Debug, Clone)]
 pub struct Sm9EncKey {
@@ -14,6 +19,41 @@ pub struct Sm9EncKey {
 pub struct Sm9EncMasterKey {
     ke: U256,
     ppube: Point,
+}
+
+impl Sm9EncKey {
+    pub fn decrypt(&self, idb: &[u8], data: &[u8]) -> Sm9Result<Vec<u8>> {
+        let c1_bytes = &data[0..65];
+        let c2 = &data[(65 + 32)..];
+        let c3 = &data[65..(65 + 32)];
+
+        let c1 = Point::from_bytes(c1_bytes);
+        let w = sm9_u256_pairing(&self.de, &c1);
+        let w_bytes = w.to_bytes_be();
+        let mut k_append: Vec<u8> = vec![];
+        k_append.extend_from_slice(&c1_bytes[1..65]);
+        k_append.extend_from_slice(&w_bytes);
+        k_append.extend_from_slice(idb);
+        let k = kdf(&k_append, (255 + 32) as usize);
+        fn is_zero(x: &Vec<u8>) -> bool {
+            x.iter().all(|&byte| byte == 0)
+        }
+
+        if !is_zero(&k) {
+            let k = k.as_slice();
+            let mlen = data.len() - (65 + 32);
+            let k1 = &k[0..mlen];
+            let k2 = &k[mlen..];
+            let u = sm3_hmac(k2, c2, 32);
+            if !u.as_slice().eq(c3) {
+                return Err(Sm9Error::InvalidDigest);
+            }
+            let m = xor(c2, &k1, k1.len());
+            Ok(m)
+        } else {
+            Err(Sm9Error::KdfHashError)
+        }
+    }
 }
 
 impl Sm9EncMasterKey {
@@ -35,23 +75,32 @@ impl Sm9EncMasterKey {
         let mut k = vec![];
         loop {
             // A2: rand r in [1, N-1]
-            let r = sm9_random_u256(&SM9_N_MINUS_ONE);
+            let mut r = sm9_random_u256(&SM9_N_MINUS_ONE);
+            r = [
+                0xe56ee19cd69ecf13,
+                0x49f2934b18ea8bee,
+                0xd603ab4ff58ec744,
+                0xb640000002a3a6f1,
+            ];
 
             // A3: C1 = r * Q
             c1 = c1.point_mul(&r);
+            let cbuf = c1.to_bytes_be();
+            let cbuf = cbuf.as_slice();
 
             // A4: g = e(Ppube, P2)
             let mut g = sm9_u256_pairing(&SM9_TWIST_POINT_MONT_P2, &self.ppube);
 
             // A5: w = g^r
             g = g.pow(&r);
+            let gbuf = g.to_bytes_be();
+            let gbuf = gbuf.as_slice();
 
             // A6: K = KDF(C || w || ID_B, klen), if K == 0, goto A2
             let mut k_append: Vec<u8> = vec![];
-            k_append.push(0x04);
-            k_append.extend_from_slice(&c1.x.to_bytes_be());
-            k_append.extend_from_slice(&c1.y.to_bytes_be());
-            k_append.extend_from_slice(&g.to_bytes_be());
+            // k_append.push(0x04);
+            k_append.extend_from_slice(&cbuf[1..cbuf.len()]);
+            k_append.extend_from_slice(gbuf);
             k_append.extend_from_slice(idb);
             k = kdf(&k_append, (255 + 32) as usize);
             fn is_zero(x: &Vec<u8>) -> bool {
@@ -66,12 +115,9 @@ impl Sm9EncMasterKey {
         let k1 = &k[0..data.len()];
         let k2 = &k[data.len()..];
         let c2 = xor(k1, &data, data.len());
-
-        let c3 = sm3_hmac(k2, c2.as_slice());
-
+        let c3 = sm3_hmac(k2, &c2, 32usize);
         let mut c: Vec<u8> = vec![];
-        c.extend_from_slice(&c1.x.to_bytes_be());
-        c.extend_from_slice(&c1.y.to_bytes_be());
+        c.extend_from_slice(&c1.to_bytes_be());
         c.extend_from_slice(&c3);
         c.extend_from_slice(&c2);
         c
@@ -98,24 +144,23 @@ impl Sm9EncMasterKey {
 
 const BLOCK_SIZE: usize = 64;
 
-fn sm3_hmac(key: &[u8], message: &[u8]) -> Vec<u8> {
+fn sm3_hmac(key: &[u8], message: &[u8], klen: usize) -> Vec<u8> {
     let mut ipad = [0x36u8; BLOCK_SIZE];
     let mut opad = [0x5cu8; BLOCK_SIZE];
 
-    // 如果密钥长度大于 BLOCK_SIZE，先进行哈希
-    let mut key = if key.len() > BLOCK_SIZE {
-        sm3_hash(key).to_vec()
-    } else {
-        key.to_vec()
-    };
+    let mut key_block = [0u8; 64];
 
-    // 如果密钥长度小于 BLOCK_SIZE，用 0x00 填充到 BLOCK_SIZE
-    key.resize(BLOCK_SIZE, 0);
+    // 如果密钥长度大于 BLOCK_SIZE，先进行哈希
+    if klen > BLOCK_SIZE {
+        key_block[..32].copy_from_slice(&sm3_hash(key));
+    } else {
+        key_block[..klen].copy_from_slice(&key[0..klen]);
+    };
 
     // 准备 ipad 和 opad
     for i in 0..BLOCK_SIZE {
-        ipad[i] ^= key[i];
-        opad[i] ^= key[i];
+        ipad[i] ^= key_block[i];
+        opad[i] ^= key_block[i];
     }
 
     // 内层哈希: H((K ^ ipad) || message)
@@ -204,9 +249,9 @@ mod sm9_key_test {
 
     #[test]
     fn test_encrypt() {
-        let data: [u8; 20] = [
+        let data: [u8; 21] = [
             0x43, 0x68, 0x69, 0x6E, 0x65, 0x73, 0x65, 0x20, 0x49, 0x42, 0x53, 0x20, 0x73, 0x74,
-            0x61, 0x6E, 0x64, 0x61, 0x72, 0x64,
+            0x61, 0x6E, 0x64, 0x61, 0x72, 0x64, 0x64,
         ];
 
         let idb = [0x42, 0x6F, 0x62u8];
@@ -235,7 +280,10 @@ mod sm9_key_test {
         );
 
         let ret = msk.encrypt(&idb, &data);
-
+        println!("Message =    {:?}", &data);
+        println!("Ciphertext = {:?}", ret);
+        let m = r.unwrap().decrypt(&idb, &ret);
+        println!("Plaintext =  {:?}", m.unwrap());
         assert_eq!(true, r.unwrap().de.point_equals(&r_de));
     }
 }

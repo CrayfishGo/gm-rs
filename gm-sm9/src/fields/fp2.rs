@@ -171,8 +171,8 @@ impl FieldElement for Fp2 {
 
     fn to_bytes_be(&self) -> Vec<u8> {
         let mut bytes: Vec<u8> = vec![];
-        bytes.extend_from_slice(fp_from_mont(&self.c1).to_bytes_be().as_slice());
-        bytes.extend_from_slice(fp_from_mont(&self.c0).to_bytes_be().as_slice());
+        bytes.extend_from_slice(&self.c1.to_bytes_be().as_slice());
+        bytes.extend_from_slice(&self.c0.to_bytes_be().as_slice());
         bytes
     }
 }

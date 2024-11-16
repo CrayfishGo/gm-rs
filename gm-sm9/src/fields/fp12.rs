@@ -2,7 +2,7 @@ use crate::fields::fp::Fp;
 use crate::fields::fp2::Fp2;
 use crate::fields::fp4::Fp4;
 use crate::fields::FieldElement;
-use crate::u256::U256;
+use crate::u256::{u256_cmp, U256};
 use crate::{
     SM9_MONT_ALPHA1, SM9_MONT_ALPHA2, SM9_MONT_ALPHA3, SM9_MONT_ALPHA4, SM9_MONT_ALPHA5,
     SM9_MONT_BETA, SM9_N_MINUS_ONE,
@@ -399,7 +399,7 @@ impl FieldElement for Fp12 {
 
 impl Fp12 {
     pub(crate) fn pow(&self, e: &U256) -> Self {
-        assert!(*e < SM9_N_MINUS_ONE);
+        assert!(u256_cmp(e, &SM9_N_MINUS_ONE) < 0);
         let mut w = 0_u64;
         let mut t = Fp12 {
             c0: Fp4::mont_one(),
@@ -411,7 +411,7 @@ impl Fp12 {
             w = e[i];
             for j in 0..64 {
                 t = t.fp_sqr();
-                if w & 0x8000000000000000 == 1 {
+                if w & 0x8000000000000000 != 0 {
                     t = t.fp_mul(self)
                 }
                 w <<= 1;

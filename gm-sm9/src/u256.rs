@@ -14,12 +14,12 @@ pub(crate) const SM9_FIVE: U256 = [5, 0, 0, 0];
 #[inline(always)]
 pub fn sm9_random_u256(range: &U256) -> U256 {
     let mut rng = rand::thread_rng();
-    let mut buf: [u8; 32] = [0; 32];
     let mut ret;
     loop {
+        let mut buf: [u8; 32] = [0; 32];
         rng.fill_bytes(&mut buf[..]);
         ret = u256_from_be_bytes(&buf);
-        if u256_cmp(&ret, range) < 0 && ret != [0, 0, 0, 0] {
+        if u256_cmp(&ret, range) < 0 && ret >= [1, 0, 0, 0] {
             break;
         }
     }

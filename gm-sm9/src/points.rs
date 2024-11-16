@@ -1,4 +1,4 @@
-use crate::fields::fp::{fp_from_hex, Fp};
+use crate::fields::fp::{fp_from_bytes, fp_from_hex, Fp};
 use crate::fields::fp12::Fp12;
 use crate::fields::fp2::Fp2;
 use crate::fields::FieldElement;
@@ -11,6 +11,27 @@ pub struct Point {
     pub(crate) x: Fp,
     pub(crate) y: Fp,
     pub(crate) z: Fp,
+}
+
+impl Point {
+    pub(crate) fn from_bytes(b: &[u8]) -> Self {
+        let x = fp_from_bytes(&b[1..33]);
+        let y = fp_from_bytes(&b[33..65]);
+        Self {
+            x,
+            y,
+            z: SM9_MODP_MONT_ONE,
+        }
+    }
+
+    pub fn to_bytes_be(&self) -> Vec<u8> {
+        let mut ppend: Vec<u8> = vec![];
+        let p = self.to_affine_point();
+        ppend.push(0x04); // uncompress point
+        ppend.extend_from_slice(&p.x.to_bytes_be());
+        ppend.extend_from_slice(&p.y.to_bytes_be());
+        ppend
+    }
 }
 
 #[derive(Copy, Debug, Clone)]
@@ -47,7 +68,7 @@ impl TwistPoint {
             0x1c753e748601c992,
         ];
         let x = self.x;
-        let y = self.y;
+        let y = self.y.fp_neg();
         let mut z = self.z.fp_mul_fp(&c);
         Self { x, y, z }
     }
@@ -409,7 +430,7 @@ impl Point {
 
         let mut r = Point::zero();
         let mut r_infinity = true;
-        for i in (0..n - 1).rev() {
+        for i in (0..n).rev() {
             let booth = sm9_u256_get_booth(k, window_size, i);
             if r_infinity {
                 if booth != 0 {
@@ -710,7 +731,7 @@ pub(crate) fn sm9_u256_pairing(q: &TwistPoint, p: &Point) -> Fp12 {
     pre[0] = q.y.fp_sqr();
     pre[4] = q.x.fp_mul(&q.z);
     pre[4] = pre[4].fp_double();
-    pre[1] = q.z;
+    pre[1] = q.z.fp_sqr();
     pre[1] = q.z.fp_mul(&pre[1]);
     pre[2] = pre[1].fp_mul_fp(&p_affine.y);
     pre[2] = pre[2].fp_double();

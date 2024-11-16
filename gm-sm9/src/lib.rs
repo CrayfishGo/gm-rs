@@ -1,5 +1,4 @@
 #![doc = include_str!("../README.md")]
-
 use crate::fields::fp2::Fp2;
 use crate::points::{Point, TwistPoint};
 use crate::u256::U256;
@@ -10,6 +9,7 @@ pub mod key;
 pub mod points;
 mod sm9_p256_table;
 pub mod u256;
+pub mod error;
 
 /// 本文使用256位的BN曲线。
 ///
