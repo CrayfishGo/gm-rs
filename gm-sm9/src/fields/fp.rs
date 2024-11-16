@@ -1,80 +1,13 @@
 use rand::RngCore;
 
-use crate::fields::fp2::Fp2;
 use crate::fields::FieldElement;
 use crate::u256::{
     u256_add, u256_cmp, u256_from_be_bytes, u256_mul, u256_sub, u256_to_be_bytes, u512_add,
     SM9_ONE, SM9_ZERO, U256,
 };
-
-/// 本文使用256位的BN曲线。
-///
-/// 椭圆曲线方程：y2 = x3 + b
-///
-/// 参数 t: 60000000 0058F98A
-///
-/// 基域特征 q(t) = 36t^4 + 36t^3 + 24t^2 + 6t + 1
-///
-/// p =  B6400000 02A3A6F1 D603AB4F F58EC745 21F2934B 1A7AEEDB E56F9B27 E351457D
-pub(crate) const SM9_P: U256 = [
-    0xe56f9b27e351457d,
-    0x21f2934b1a7aeedb,
-    0xd603ab4ff58ec745,
-    0xb640000002a3a6f1,
-];
-
-pub(crate) const SM9_P_MINUS_ONE: U256 = [
-    0xe56f9b27e351457c,
-    0x21f2934b1a7aeedb,
-    0xd603ab4ff58ec745,
-    0xb640000002a3a6f1,
-];
-
-/// e = p - 2 = b640000002a3a6f1d603ab4ff58ec74521f2934b1a7aeedbe56f9b27e351457b
-///
-/// p - 2, used in a^(p-2) = a^-1
-pub(crate) const SM9_P_MINUS_TWO: U256 = [
-    0xe56f9b27e351457b,
-    0x21f2934b1a7aeedb,
-    0xd603ab4ff58ec745,
-    0xb640000002a3a6f1,
-];
-
-/// p = b640000002a3a6f1d603ab4ff58ec74521f2934b1a7aeedbe56f9b27e351457d
-///
-/// p' = -p^(-1) mod 2^256 = afd2bac5558a13b3966a4b291522b137181ae39613c8dbaf892bc42c2f2ee42b
-///
-/// sage: -(IntegerModRing(2^256)(p))^-1
-const SM9_P_PRIME: U256 = [
-    0x892bc42c2f2ee42b,
-    0x181ae39613c8dbaf,
-    0x966a4b291522b137,
-    0xafd2bac5558a13b3,
-];
-
-// mont params (mod p)
-// mu = p^-1 mod 2^64 = 0x76d43bd3d0d11bd5
-// 2^512 mod p = 0x2ea795a656f62fbde479b522d6706e7b88f8105fae1a5d3f27dea312b417e2d2
-// mont(1) mod p = 2^256 mod p = 0x49bffffffd5c590e29fc54b00a7138bade0d6cb4e58511241a9064d81caeba83
-const SM9_MODP_MU: u64 = 0x76d43bd3d0d11bd5_u64;
-const SM9_MODP_2E512: U256 = [
-    0x27dea312b417e2d2,
-    0x88f8105fae1a5d3f,
-    0xe479b522d6706e7b,
-    0x2ea795a656f62fbd,
-];
-const SM9_MODP_MONT_ONE: U256 = [
-    0x1a9064d81caeba83,
-    0xde0d6cb4e5851124,
-    0x29fc54b00a7138ba,
-    0x49bffffffd5c590e,
-];
-const SM9_MODP_MONT_FIVE: U256 = [
-    0xb9f2c1e8c8c71995,
-    0x125df8f246a377fc,
-    0x25e650d049188d1c,
-    0x43fffffed866f63,
-];
+use crate::{
+    SM9_MODP_2E512, SM9_MODP_MONT_ONE, SM9_P, SM9_P_MINUS_ONE, SM9_P_MINUS_TWO, SM9_P_PRIME,
+};
 
 pub type Fp = U256;
 
@@ -117,10 +50,6 @@ pub fn fp_from_mont(a: &Fp) -> Fp {
     mont_mul(a, &SM9_ONE)
 }
 
-pub fn fp_to_bytes(a: &Fp) -> Vec<u8> {
-    let t = fp_from_mont(a);
-    u256_to_be_bytes(&t)
-}
 
 pub(crate) fn fp_from_bytes(buf: &[u8; 32]) -> Fp {
     let mut t = u256_from_be_bytes(buf);
@@ -245,6 +174,10 @@ impl FieldElement for Fp {
 
     fn fp_inv(&self) -> Self {
         fp_pow(self, &SM9_P_MINUS_TWO)
+    }
+
+    fn to_bytes_be(&self) -> Vec<u8> {
+        u256_to_be_bytes(&fp_from_mont(self))
     }
 }
 

@@ -1,25 +1,21 @@
-use crate::fields::fp::{fp_from_hex, Fp};
+use crate::fields::fp::{fp_from_hex, fp_from_mont, Fp};
 use crate::fields::FieldElement;
-use crate::u256::U256;
-
-const SM9_FP2_ZERO: [U256; 2] = [[0, 0, 0, 0], [0, 0, 0, 0]];
-const SM9_FP2_ONE: [U256; 2] = [[1, 0, 0, 0], [0, 0, 0, 0]];
-const SM9_FP2_U: [U256; 2] = [[0, 0, 0, 0], [1, 0, 0, 0]];
-const SM9_FP2_5U: [U256; 2] = [[0, 0, 0, 0], [5, 0, 0, 0]];
-const SM9_FP2_MONT_5U: [U256; 2] = [
-    [0, 0, 0, 0],
-    [
-        0xb9f2c1e8c8c71995,
-        0x125df8f246a377fc,
-        0x25e650d049188d1c,
-        0x43fffffed866f63,
-    ],
-];
 
 #[derive(Debug, Copy, Clone)]
 pub struct Fp2 {
     pub(crate) c0: Fp,
     pub(crate) c1: Fp,
+}
+
+
+impl Fp2 {
+    pub(crate) fn fp_mul_fp(&self, k: &Fp) -> Fp2 {
+        Fp2 {
+            c0: self.c0.fp_mul(k),
+            c1: self.c1.fp_mul(k),
+        }
+    }
+
 }
 
 impl PartialEq for Fp2 {
@@ -174,6 +170,13 @@ impl FieldElement for Fp2 {
         r.c1 = r1;
         r
     }
+
+    fn to_bytes_be(&self) -> Vec<u8> {
+        let mut bytes: Vec<u8> = vec![];
+        bytes.extend_from_slice(fp_from_mont(&self.c1).to_bytes_be().as_slice());
+        bytes.extend_from_slice(fp_from_mont(&self.c0).to_bytes_be().as_slice());
+        bytes
+    }
 }
 
 impl Fp2 {
@@ -204,7 +207,7 @@ impl Fp2 {
         Self { c0: r0, c1: a0 }
     }
 
-    pub(crate) fn mul_u(&self, rhs: &Self) -> Self {
+    pub(crate) fn fp_mul_u(&self, rhs: &Self) -> Self {
         let mut r0 = Fp::zero();
         let mut r1 = Fp::zero();
         let mut t = Fp::zero();
@@ -225,12 +228,6 @@ impl Fp2 {
         Self { c0: r0, c1: r1 }
     }
 
-    pub(crate) fn mul_fp(&self, k: &Fp) -> Self {
-        Fp2 {
-            c0: self.c0.fp_mul(k),
-            c1: self.c1.fp_mul(k),
-        }
-    }
 
     pub(crate) fn sqr_u(&self) -> Self {
         let mut r: Fp2 = Fp2::zero();

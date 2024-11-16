@@ -1,19 +1,175 @@
-use crate::fields::FieldElement;
+use crate::fields::fp::Fp;
+use crate::fields::fp2::Fp2;
 use crate::fields::fp4::Fp4;
+use crate::fields::FieldElement;
 use crate::u256::U256;
-
-const SM9_N_MINUS_ONE: U256 = [
-    0xe56ee19cd69ecf24,
-    0x49f2934b18ea8bee,
-    0xd603ab4ff58ec744,
-    0xb640000002a3a6f1,
-];
+use crate::{
+    SM9_MONT_ALPHA1, SM9_MONT_ALPHA2, SM9_MONT_ALPHA3, SM9_MONT_ALPHA4, SM9_MONT_ALPHA5,
+    SM9_MONT_BETA, SM9_N_MINUS_ONE,
+};
 
 #[derive(Debug, Copy, Clone)]
 pub struct Fp12 {
     pub(crate) c0: Fp4,
     pub(crate) c1: Fp4,
     pub(crate) c2: Fp4,
+}
+
+impl Fp12 {
+    pub(crate) fn fp_line_mul(&self, lw: &[Fp2; 3]) -> Fp12 {
+        let lw4 = Fp4 {
+            c0: lw[0],
+            c1: lw[2],
+        };
+
+        let mut r0 = self.c0.fp_mul(&lw4);
+        let mut r1 = self.c1.fp_mul(&lw4);
+        let mut r2 = self.c2.fp_mul(&lw4);
+
+        let mut t = self.c0.c0.fp_mul(&lw[1]);
+        r2.c0 = r2.c0.fp_add(&t);
+
+        t = self.c0.c1.fp_mul(&lw[1]);
+        r2.c1 = r2.c1.fp_add(&t);
+
+        t = self.c1.c0.fp_mul(&lw[1]);
+        r0.c1 = r0.c1.fp_add(&t);
+
+        t = self.c1.c1.fp_mul_u(&lw[1]);
+        r0.c0 = r0.c0.fp_add(&t);
+
+        t = self.c2.c0.fp_mul(&lw[1]);
+        r1.c1 = r1.c1.fp_add(&t);
+
+        t = self.c2.c1.fp_mul_u(&lw[1]);
+        r1.c0 = r1.c0.fp_add(&t);
+        Fp12 {
+            c0: r0,
+            c1: r1,
+            c2: r2,
+        }
+    }
+
+    pub(crate) fn fp12_frobenius6(&self) -> Fp12 {
+        let (mut a, mut b, mut c) = (self.c0, self.c1, self.c2);
+        a = a.conjugate();
+        b = b.conjugate();
+        b = b.fp_neg();
+        c = c.conjugate();
+        Fp12 {
+            c0: a,
+            c1: b,
+            c2: c,
+        }
+    }
+
+    pub(crate) fn fp12_frobenius2(&self) -> Fp12 {
+        let (mut a, mut b, mut c) = (self.c0, self.c1, self.c2);
+        a = a.conjugate();
+        b = b.conjugate();
+        b = b.fp_mul_fp(&SM9_MONT_ALPHA2);
+        c = c.conjugate();
+        c = c.fp_mul_fp(&SM9_MONT_ALPHA4);
+        Fp12 {
+            c0: a,
+            c1: b,
+            c2: c,
+        }
+    }
+
+    pub(crate) fn final_exponent_hard_part(&self) -> Fp12 {
+        // a2 = 0xd8000000019062ed0000b98b0cb27659
+        // a3 = 0x2400000000215d941
+        let a2: Fp = [0x0000b98b0cb27659, 0xd8000000019062ed, 0, 0];
+        let a3: Fp = [0x400000000215d941, 0x2, 0, 0];
+        let nine: Fp = [9, 0, 0, 0];
+
+        let mut t0 = self.pow(&a3);
+        t0 = t0.fp_inv();
+        let mut t1 = t0.fp12_frobenius();
+        t1 = t0.fp_mul(&t1);
+
+        t0 = t0.fp_mul(&t1);
+        let mut t2 = self.fp12_frobenius();
+        let mut t3 = t2.fp_mul(self);
+        t3 = t3.pow(&nine);
+
+        t0 = t0.fp_mul(&t3);
+        t3 = self.fp_sqr();
+        t3 = t3.fp_sqr();
+        t0 = t0.fp_mul(&t3);
+        t2 = t2.fp_sqr();
+        t2 = t2.fp_mul(&t1);
+
+        t1 = self.fp12_frobenius2();
+        t1 = t1.fp_mul(&t2);
+
+        t2 = t1.pow(&a2);
+        t0 = t2.fp_mul(&t0);
+        t1 = self.fp12_frobenius3();
+        t1 = t1.fp_mul(&t0);
+
+        t1
+    }
+
+    pub(crate) fn final_exponent(&self) -> Fp12 {
+        let mut t0 = self.fp12_frobenius6();
+        let mut t1 = self.fp_inv();
+        t0 = t0.fp_mul(&t1);
+        t1 = t0.fp12_frobenius2();
+        t0 = t0.fp_mul(&t1);
+        t0 = t0.final_exponent_hard_part();
+        t0
+    }
+
+    fn fp12_frobenius(&self) -> Self {
+        let (a, b, c) = (self.c0, self.c1, self.c2);
+        let (mut ra, mut rb, mut rc) = (Fp4::zero(), Fp4::zero(), Fp4::zero());
+
+        ra.c0 = a.c0.conjugate();
+        ra.c1 = a.c1.conjugate();
+        ra.c1 = ra.c1.fp_mul_fp(&SM9_MONT_ALPHA3);
+
+        rb.c0 = b.c0.conjugate();
+        rb.c0 = rb.c0.fp_mul_fp(&SM9_MONT_ALPHA1);
+        rb.c1 = b.c1.conjugate();
+        rb.c1 = rb.c1.fp_mul_fp(&SM9_MONT_ALPHA4);
+
+        rc.c0 = c.c0.conjugate();
+        rc.c0 = rc.c0.fp_mul_fp(&SM9_MONT_ALPHA2);
+        rc.c1 = c.c1.conjugate();
+        rc.c1 = rc.c1.fp_mul_fp(&SM9_MONT_ALPHA5);
+
+        Self {
+            c0: ra,
+            c1: rb,
+            c2: rc,
+        }
+    }
+
+    fn fp12_frobenius3(&self) -> Self {
+        let (a, b, c) = (self.c0, self.c1, self.c2);
+        let (mut ra, mut rb, mut rc) = (Fp4::zero(), Fp4::zero(), Fp4::zero());
+
+        ra.c0 = a.c0.conjugate();
+        ra.c1 = a.c1.conjugate();
+        ra.c1 = ra.c1.fp_mul(&SM9_MONT_BETA);
+        ra.c1 = ra.c1.fp_neg();
+
+        rb.c0 = b.c0.conjugate();
+        rb.c0 = rb.c0.fp_mul(&SM9_MONT_BETA);
+        rb.c1 = b.c1.conjugate();
+
+        rc.c0 = c.c0.conjugate();
+        rc.c0 = rc.c0.fp_neg();
+        rc.c1 = c.c1.conjugate();
+        rc.c1 = rc.c1.fp_mul(&SM9_MONT_BETA);
+        Self {
+            c0: ra,
+            c1: rb,
+            c2: rc,
+        }
+    }
 }
 
 impl PartialEq for Fp12 {
@@ -213,7 +369,7 @@ impl FieldElement for Fp12 {
             t1 = t1.fp_sub(&t2);
 
             t2 = self.c0.fp_sqr();
-            t3 = self.c1.mul_v(&self.c2);
+            t3 = self.c1.fp_mul_v(&self.c2);
             t2 = t2.fp_sub(&t3);
 
             t3 = t1.fp_sqr();
@@ -230,6 +386,14 @@ impl FieldElement for Fp12 {
             r.c2 = t0.fp_mul(&t3);
             r
         }
+    }
+
+    fn to_bytes_be(&self) -> Vec<u8> {
+        let mut bytes: Vec<u8> = vec![];
+        bytes.extend_from_slice(self.c2.to_bytes_be().as_slice());
+        bytes.extend_from_slice(self.c1.to_bytes_be().as_slice());
+        bytes.extend_from_slice(self.c0.to_bytes_be().as_slice());
+        bytes
     }
 }
 

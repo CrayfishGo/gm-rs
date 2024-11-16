@@ -1,27 +1,27 @@
 use crate::fields::fp::Fp;
 use crate::fields::fp2::Fp2;
 use crate::fields::FieldElement;
-use crate::u256::U256;
-
-pub(crate) const SM9_FP4_ZERO: [[U256; 2]; 2] =
-    [[[0, 0, 0, 0], [0, 0, 0, 0]], [[0, 0, 0, 0], [0, 0, 0, 0]]];
-pub(crate) const SM9_FP4_MONT_ONE: [[U256; 2]; 2] = [
-    [
-        [
-            0x1a9064d81caeba83,
-            0xde0d6cb4e5851124,
-            0x29fc54b00a7138ba,
-            0x49bffffffd5c590e,
-        ],
-        [0, 0, 0, 0],
-    ],
-    [[0, 0, 0, 0], [0, 0, 0, 0]],
-];
 
 #[derive(Debug, Copy, Clone)]
 pub struct Fp4 {
     pub(crate) c0: Fp2,
     pub(crate) c1: Fp2,
+}
+
+impl Fp4 {
+    pub(crate) fn fp_mul_fp(&self, k: &Fp) -> Fp4 {
+        Self {
+            c0: self.c0.fp_mul_fp(k),
+            c1: self.c1.fp_mul_fp(k),
+        }
+    }
+
+    pub(crate) fn fp_mul_fp2(&self, k: &Fp2) -> Fp4 {
+        Self {
+            c0: self.c0.fp_mul(k),
+            c1: self.c1.fp_mul(k),
+        }
+    }
 }
 
 impl PartialEq for Fp4 {
@@ -151,6 +151,13 @@ impl FieldElement for Fp4 {
 
         Self { c0: r0, c1: r1 }
     }
+
+    fn to_bytes_be(&self) -> Vec<u8> {
+        let mut bytes: Vec<u8> = vec![];
+        bytes.extend_from_slice(self.c1.to_bytes_be().as_slice());
+        bytes.extend_from_slice(self.c0.to_bytes_be().as_slice());
+        bytes
+    }
 }
 
 impl Fp4 {
@@ -168,31 +175,18 @@ impl Fp4 {
             c1: Fp2::zero(),
         }
     }
-    pub(crate) fn mul_fp(&self, k: &Fp) -> Self {
-        Self {
-            c0: self.c0.mul_fp(k),
-            c1: self.c1.mul_fp(k),
-        }
-    }
 
-    pub(crate) fn mul_fp2(&self, k: &Fp2) -> Self {
-        Self {
-            c0: self.c0.fp_mul(k),
-            c1: self.c1.fp_mul(k),
-        }
-    }
-
-    pub(crate) fn mul_v(&self, b: &Self) -> Self {
+    pub(crate) fn fp_mul_v(&self, b: &Self) -> Self {
         let mut r0 = Fp2::zero();
         let mut r1 = Fp2::zero();
         let mut t = Fp2::zero();
 
-        r0 = self.c0.mul_u(&b.c1);
-        t = self.c1.mul_u(&b.c0);
+        r0 = self.c0.fp_mul_u(&b.c1);
+        t = self.c1.fp_mul_u(&b.c0);
         r0 = r0.fp_add(&t);
 
         r1 = self.c0.fp_mul(&b.c0);
-        t = self.c1.mul_u(&b.c1);
+        t = self.c1.fp_mul_u(&b.c1);
         r1 = r1.fp_add(&t);
 
         Self { c0: r0, c1: r1 }
@@ -224,7 +218,7 @@ impl Fp4 {
         let mut r1 = Fp2::zero();
         let mut t = Fp2::zero();
 
-        t = self.c0.mul_u(&self.c1);
+        t = self.c0.fp_mul_u(&self.c1);
         r0 = t.fp_double();
 
         r1 = self.c0.fp_sqr();

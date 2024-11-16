@@ -173,6 +173,15 @@ pub fn u256_mul(a: &U256, b: &U256) -> U512 {
 }
 
 #[inline(always)]
+pub fn xor(k: &[u8], data: &[u8], len: usize) -> Vec<u8> {
+    let mut ret: Vec<u8> = vec![];
+    for i in 0..len {
+        ret.push(k[i] ^ data[i]);
+    }
+    ret
+}
+
+#[inline(always)]
 pub fn u256_to_be_bytes(a: &U256) -> Vec<u8> {
     let mut ret: Vec<u8> = Vec::new();
     for i in (0..4).rev() {

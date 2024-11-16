@@ -1,14 +1,16 @@
 use crate::fields::fp::{fp_from_hex, Fp};
+use crate::fields::fp12::Fp12;
 use crate::fields::fp2::Fp2;
 use crate::fields::FieldElement;
 use crate::sm9_p256_table::SM9_P256_PRECOMPUTED;
 use crate::u256::{sm9_u256_get_booth, u256_cmp, u256_to_bits, SM9_ZERO, U256};
+use crate::SM9_MODP_MONT_ONE;
 
 #[derive(Copy, Debug, Clone)]
 pub struct Point {
-    x: Fp,
-    y: Fp,
-    z: Fp,
+    pub(crate) x: Fp,
+    pub(crate) y: Fp,
+    pub(crate) z: Fp,
 }
 
 #[derive(Copy, Debug, Clone)]
@@ -16,6 +18,39 @@ pub struct TwistPoint {
     pub(crate) x: Fp2,
     pub(crate) y: Fp2,
     pub(crate) z: Fp2,
+}
+
+impl TwistPoint {
+    pub(crate) fn point_pi1(&self) -> TwistPoint {
+        // c = 0x3f23ea58e5720bdb843c6cfa9c08674947c5c86e0ddd04eda91d8354377b698b
+        // mont version c
+        let c: U256 = [
+            0x1a98dfbd4575299f,
+            0x9ec8547b245c54fd,
+            0xf51f5eac13df846c,
+            0x9ef74015d5a16393,
+        ];
+        let x = self.x.conjugate();
+        let y = self.y.conjugate();
+        let mut z = self.z.conjugate();
+        z = z.fp_mul_fp(&c);
+        Self { x, y, z }
+    }
+
+    pub(crate) fn point_neg_pi2(&self) -> TwistPoint {
+        // c = 0xf300000002a3a6f2780272354f8b78f4d5fc11967be65334
+        // mont version c
+        let c: U256 = [
+            0xb626197dce4736ca,
+            0x8296b3557ed0186,
+            0x9c705db2fd91512a,
+            0x1c753e748601c992,
+        ];
+        let x = self.x;
+        let y = self.y;
+        let mut z = self.z.fp_mul_fp(&c);
+        Self { x, y, z }
+    }
 }
 
 // 群 G1的生成元 P1 = (xP1 , yP1);
@@ -175,6 +210,23 @@ impl Point {
             x: Fp::one(),
             y: Fp::one(),
             z: Fp::zero(),
+        }
+    }
+
+    pub fn to_affine_point(&self) -> Point {
+        if u256_cmp(&self.z, &SM9_MODP_MONT_ONE) == 0 {
+            Point {
+                x: self.x,
+                y: self.y,
+                z: Fp::one(),
+            }
+        } else {
+            let mut z_inv = self.z.fp_inv();
+            let mut y = self.y.fp_mul(&z_inv);
+            z_inv = z_inv.fp_sqr();
+            let x = self.x.fp_mul(&z_inv);
+            y = y.fp_mul(&z_inv);
+            Point { x, y, z: Fp::one() }
         }
     }
 
@@ -581,7 +633,7 @@ impl TwistPoint {
     }
 }
 
-fn twist_point_add_full(p1: &TwistPoint, p2: &TwistPoint) -> TwistPoint {
+pub(crate) fn twist_point_add_full(p1: &TwistPoint, p2: &TwistPoint) -> TwistPoint {
     let x1 = p1.x;
     let y1 = p1.y;
     let z1 = p1.z;
@@ -635,6 +687,249 @@ fn twist_point_add_full(p1: &TwistPoint, p2: &TwistPoint) -> TwistPoint {
         x: t6,
         y: t1,
         z: t7,
+    }
+}
+
+pub(crate) fn sm9_u256_pairing(q: &TwistPoint, p: &Point) -> Fp12 {
+    let abits: Vec<char> = "00100000000000000000000000000000000000010000101100020200101000020"
+        .chars()
+        .collect();
+
+    let mut pre: [Fp2; 5] = [Fp2::zero(); 5];
+    let mut t = TwistPoint {
+        x: q.x.clone(),
+        y: q.y.clone(),
+        z: q.z.clone(),
+    };
+
+    let mut lw: [Fp2; 3] = [Fp2::zero(); 3];
+
+    let p_affine = p.to_affine_point();
+    let mut q1 = q.point_neg();
+
+    pre[0] = q.y.fp_sqr();
+    pre[4] = q.x.fp_mul(&q.z);
+    pre[4] = pre[4].fp_double();
+    pre[1] = q.z;
+    pre[1] = q.z.fp_mul(&pre[1]);
+    pre[2] = pre[1].fp_mul_fp(&p_affine.y);
+    pre[2] = pre[2].fp_double();
+    pre[3] = pre[1].fp_mul_fp(&p_affine.x);
+    pre[3] = pre[3].fp_double();
+    pre[3] = pre[3].fp_neg();
+    let mut r = Fp12::one();
+    for i in 0..abits.len() {
+        r = r.fp_sqr();
+        t = sm9_u256_eval_g_tangent(&mut lw, &t, &p_affine);
+        r = r.fp_line_mul(&lw);
+        if abits[i] == '1' {
+            t = sm9_u256_eval_g_line(&mut lw, &pre, &t, &q, &p_affine);
+            r = r.fp_line_mul(&lw);
+        } else if abits[i] == '2' {
+            t = sm9_u256_eval_g_line(&mut lw, &pre, &t, &q1, &p_affine);
+            r = r.fp_line_mul(&lw);
+        }
+    }
+
+    q1 = q.point_pi1();
+    let q2 = q.point_neg_pi2();
+    t = sm9_u256_eval_g_line_no_pre(&mut lw, &t, &q1, &p_affine);
+    r = r.fp_line_mul(&lw);
+
+    t = sm9_u256_eval_g_line_no_pre(&mut lw, &t, &q2, &p_affine);
+    r = r.fp_line_mul(&lw);
+
+    r = r.final_exponent();
+    r
+}
+
+pub(crate) fn sm9_u256_eval_g_line_no_pre(
+    lw: &mut [Fp2; 3],
+    p: &TwistPoint,
+    t: &TwistPoint,
+    q: &Point,
+) -> TwistPoint {
+    let x1 = p.x;
+    let y1 = p.y;
+    let z1 = p.z;
+    let x2 = t.x;
+    let y2 = t.y;
+    let z2 = t.z;
+
+    let mut pre: [Fp2; 5] = [Fp2::zero(); 5];
+    pre[0] = t.y.fp_sqr();
+    pre[4] = t.x.fp_mul(&t.z);
+    pre[4] = pre[4].fp_double();
+    pre[1] = t.z.fp_sqr();
+    pre[1] = pre[1].fp_mul(&t.z);
+    pre[2] = pre[1].fp_mul_fp(&q.y);
+    pre[2] = pre[2].fp_double();
+    pre[3] = pre[1].fp_mul_fp(&q.x);
+    pre[3] = pre[3].fp_double();
+    pre[3] = pre[3].fp_neg();
+
+    let mut t1 = z1.fp_sqr();
+    let mut t2 = z2.fp_sqr();
+    let mut z3 = z1.fp_add(&z2);
+    z3 = z3.fp_sqr();
+    z3 = z3.fp_sub(&t1);
+    z3 = z3.fp_sub(&t2);
+
+    let mut a = x1.fp_mul(&t2);
+    let mut b = x2.fp_mul(&t1);
+    let mut c = y1.fp_mul(&pre[1]);
+    c = c.fp_double();
+    let mut d = y2.fp_add(&z1);
+    d = d.fp_sqr();
+    d = d.fp_sub(&pre[0]);
+    d = d.fp_sub(&t1);
+    d = d.fp_mul(&t1);
+    b = b.fp_sub(&a);
+
+    z3 = z3.fp_mul(&b);
+    t1 = b.fp_double();
+    t1 = t1.fp_sqr();
+
+    let mut x3 = b.fp_mul(&t1);
+    let mut y3 = c.fp_mul(&x3);
+    a = a.fp_mul(&t1);
+    b = d.fp_sub(&c);
+    t2 = a.fp_double();
+    x3 = x3.fp_add(&t2);
+    t2 = b.fp_sqr();
+    x3 = t2.fp_sub(&x3);
+    t2 = a.fp_sub(&x3);
+    t2 = t2.fp_mul(&b);
+    y3 = t2.fp_sub(&y3);
+
+    lw[2] = z3.fp_mul(&pre[2]);
+    lw[1] = b.fp_mul(&pre[3]);
+    b = b.fp_mul(&pre[4]);
+
+    lw[0] = y2.fp_mul(&z3);
+    lw[0] = lw[0].fp_double();
+    lw[0] = b.fp_sub(&lw[0]);
+    TwistPoint {
+        x: x3,
+        y: y3,
+        z: z3,
+    }
+}
+
+pub(crate) fn sm9_u256_eval_g_line(
+    lw: &mut [Fp2; 3],
+    pre: &[Fp2; 5],
+    p: &TwistPoint,
+    t: &TwistPoint,
+    q: &Point,
+) -> TwistPoint {
+    let x1 = p.x;
+    let y1 = p.y;
+    let z1 = p.z;
+    let x2 = t.x;
+    let y2 = t.y;
+    let z2 = t.z;
+
+    let mut t1 = z1.fp_sqr();
+    let mut t2 = z2.fp_sqr();
+    let mut z3 = z1.fp_add(&z2);
+    z3 = z3.fp_sqr();
+    z3 = z3.fp_sub(&t1);
+    z3 = z3.fp_sub(&t2);
+
+    let mut a = x1.fp_mul(&t2);
+    let mut b = x2.fp_mul(&t1);
+    let mut c = y1.fp_mul(&pre[1]);
+    c = c.fp_double();
+
+    let mut d = y2.fp_add(&z1);
+    d = d.fp_sqr();
+    d = d.fp_sub(&pre[0]);
+    d = d.fp_sub(&t1);
+    d = d.fp_mul(&t1);
+    b = b.fp_sub(&a);
+    z3 = z3.fp_mul(&b);
+    t1 = b.fp_double();
+    t1 = t1.fp_sqr();
+
+    let mut x3 = b.fp_mul(&t1);
+    let mut y3 = c.fp_mul(&x3);
+    a = a.fp_mul(&t1);
+    b = d.fp_sub(&c);
+    t2 = a.fp_double();
+    x3 = x3.fp_add(&t2);
+    t2 = b.fp_sqr();
+    x3 = t2.fp_sub(&x3);
+    t2 = a.fp_sub(&x3);
+    t2 = t2.fp_mul(&b);
+    y3 = t2.fp_sub(&y3);
+
+    lw[2] = z3.fp_mul(&pre[2]);
+    lw[1] = b.fp_mul(&pre[3]);
+    b = b.fp_mul(&pre[4]);
+
+    lw[0] = y2.fp_mul(&z3);
+    lw[0] = lw[0].fp_double();
+    lw[0] = b.fp_sub(&lw[0]);
+
+    TwistPoint {
+        x: x3,
+        y: y3,
+        z: z3,
+    }
+}
+
+pub(crate) fn sm9_u256_eval_g_tangent(lw: &mut [Fp2; 3], p: &TwistPoint, q: &Point) -> TwistPoint {
+    let x = p.x;
+    let y = p.y;
+    let z = p.z;
+
+    let t1 = z.fp_sqr();
+    let mut a = x.fp_sqr();
+    let mut b = y.fp_sqr();
+    let mut c = b.fp_sqr();
+    let mut d = x.fp_add(&b);
+    d = d.fp_sqr();
+    d = d.fp_sub(&a);
+    d = d.fp_sub(&c);
+    d = d.fp_double();
+    let mut z3 = y.fp_add(&z);
+    z3 = z3.fp_sqr();
+    z3 = z3.fp_sub(&b);
+    z3 = z3.fp_sub(&t1);
+
+    lw[0] = b.fp_double();
+    lw[0] = lw[0].fp_double();
+    lw[0] = lw[0].fp_add(&a);
+    a = a.fp_triple();
+    b = a.fp_sqr();
+
+    let mut x3 = d.fp_double();
+    x3 = b.fp_sub(&x3);
+    lw[0] = lw[0].fp_add(&b);
+
+    let mut y3 = d.fp_sub(&x3);
+    y3 = y3.fp_mul(&a);
+    c = c.fp_double().fp_double().fp_double();
+    y3 = y3.fp_sub(&c);
+
+    lw[2] = z3.fp_mul(&t1);
+    lw[2] = lw[2].fp_double();
+
+    lw[1] = a.fp_mul(&t1);
+    lw[1] = lw[1].fp_double();
+    lw[1] = lw[1].fp_neg();
+
+    a = x.fp_add(&a);
+    a = a.fp_sqr();
+    lw[0] = a.fp_sub(&lw[0]);
+    lw[1] = lw[1].fp_mul_fp(&q.x);
+    lw[2] = lw[2].fp_mul_fp(&q.y);
+
+    TwistPoint {
+        x: x3,
+        y: y3,
+        z: z3,
     }
 }
 

@@ -1,4 +1,5 @@
 use crate::u256::{u256_add, u256_cmp, u256_from_be_bytes, u256_mul, u256_sub, SM9_ONE, U256};
+use crate::{SM9_N, SM9_N_BARRETT_MU, SM9_N_MINUS_ONE, SM9_N_MINUS_TWO, SM9_N_NEG, SM9_U256_N_MINUS_ONE_BARRETT_MU};
 use rand::RngCore;
 use std::fmt::Debug;
 use std::ops::{Add, Mul, MulAssign, Neg, Sub};
@@ -21,56 +22,10 @@ pub trait FieldElement: Sized + Copy + Clone + PartialEq + Eq + Debug {
     fn fp_neg(&self) -> Self;
     fn fp_div2(&self) -> Self;
     fn fp_inv(&self) -> Self;
+
+    fn to_bytes_be(&self) -> Vec<u8>;
 }
 
-/// 群的阶 N(t) = 36t^4 + 36t^3 + 18t^2 + 6t + 1
-///
-/// n =  B6400000 02A3A6F1 D603AB4F F58EC744 49F2934B 18EA8BEE E56EE19C D69ECF25
-const SM9_N: U256 = [
-    0xe56ee19cd69ecf25,
-    0x49f2934b18ea8bee,
-    0xd603ab4ff58ec744,
-    0xb640000002a3a6f1,
-];
-
-/// 2^256 - n
-const SM9_N_NEG: U256 = [
-    0x1a911e63296130db,
-    0xb60d6cb4e7157411,
-    0x29fc54b00a7138bb,
-    0x49bffffffd5c590e,
-];
-
-/// N - 1
-pub const SM9_N_MINUS_ONE: U256 = [
-    0xe56ee19cd69ecf24,
-    0x49f2934b18ea8bee,
-    0xd603ab4ff58ec744,
-    0xb640000002a3a6f1,
-];
-
-/// N - 2
-const SM9_N_MINUS_TWO: U256 = [
-    0xe56ee19cd69ecf23,
-    0x49f2934b18ea8bee,
-    0xd603ab4ff58ec744,
-    0xb640000002a3a6f1,
-];
-
-const SM9_N_BARRETT_MU: [u64; 5] = [
-    0x74df4fd4dfc97c2f,
-    0x9c95d85ec9c073b0,
-    0x55f73aebdcd1312c,
-    0x67980e0beb5759a6,
-    0x1,
-];
-
-pub const SM9_Z256_N_MINUS_ONE_BARRETT_MU: [u64; 4] = [
-    0x74df4fd4dfc97c31,
-    0x9c95d85ec9c073b0,
-    0x55f73aebdcd1312c,
-    0x67980e0beb5759a6,
-];
 
 #[inline(always)]
 pub fn fn_random_u256() -> U256 {
@@ -212,7 +167,7 @@ pub fn mod_n_from_hash(ha: &[u8]) -> U256 {
     let mut c = false;
     let mut t = 0_u64;
     let z1 = [z[3], z[4], 0, 0];
-    let mut r = u256_mul(&z1, &SM9_Z256_N_MINUS_ONE_BARRETT_MU);
+    let mut r = u256_mul(&z1, &SM9_U256_N_MINUS_ONE_BARRETT_MU);
 
     r[4] += z[3];
     c = r[4] < z[3];
