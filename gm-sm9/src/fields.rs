@@ -1,5 +1,8 @@
 use crate::u256::{u256_add, u256_cmp, u256_from_be_bytes, u256_mul, u256_sub, SM9_ONE, U256};
-use crate::{SM9_N, SM9_N_BARRETT_MU, SM9_N_MINUS_ONE, SM9_N_MINUS_TWO, SM9_N_NEG, SM9_U256_N_MINUS_ONE_BARRETT_MU};
+use crate::{
+    SM9_N, SM9_N_BARRETT_MU, SM9_N_MINUS_ONE, SM9_N_MINUS_TWO, SM9_N_NEG,
+    SM9_U256_N_MINUS_ONE_BARRETT_MU,
+};
 use rand::RngCore;
 use std::fmt::Debug;
 use std::ops::{Add, Mul, MulAssign, Neg, Sub};
@@ -25,7 +28,6 @@ pub trait FieldElement: Sized + Copy + Clone + PartialEq + Eq + Debug {
 
     fn to_bytes_be(&self) -> Vec<u8>;
 }
-
 
 #[inline(always)]
 pub fn fn_random_u256() -> U256 {
@@ -164,18 +166,15 @@ pub fn mod_n_from_hash(ha: &[u8]) -> U256 {
         z[4 - i] = getu64(&ha[8 * i..]);
     }
 
-    let mut c = false;
-    let mut t = 0_u64;
     let z1 = [z[3], z[4], 0, 0];
     let mut r = u256_mul(&z1, &SM9_U256_N_MINUS_ONE_BARRETT_MU);
 
-    r[4] += z[3];
-    c = r[4] < z[3];
-    t = z[4] + (c as u64);
-    c = t < z[4];
-    r[5] += t;
-    c = r[5] < t;
-    r[6] = u64::from(c);
+    let (sum1, carry1) = r[4].overflowing_add(z[3]);
+    r[4] = sum1;
+    let t = z[4] + carry1 as u64;
+    let (sum2, carry2) = r[5].overflowing_add(t);
+    r[5] = sum2;
+    r[6] = u64::from(carry2);
 
     r = u256_mul(&[r[5], r[6], 0, 0], &SM9_N_MINUS_ONE);
     h = u256_sub(&[z[0], z[1], z[2], z[3]], &[r[0], r[1], r[2], r[3]]).0;
