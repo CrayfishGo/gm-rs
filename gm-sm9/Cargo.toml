@@ -3,6 +3,14 @@ name = "gm-sm9"
 version = "0.1.0"
 edition = "2021"
 
+description = "A Rust Implementation of China's Standards of Encryption Algorithms SM9"
+authors = ["evanyang1120@163.com"]
+homepage = "https://github.com/CrayfishGo/gm-rs.git"
+license = "MIT"
+keywords = ["sm9"]
+categories = ["cryptography"]
+readme = "README.md"
+documentation = "https://docs.rs/gm-sm9/"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
