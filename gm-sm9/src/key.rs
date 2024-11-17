@@ -3,22 +3,21 @@ use crate::fields::{mod_n_add, mod_n_from_hash, mod_n_inv, mod_n_mul, FieldEleme
 use crate::points::{sm9_u256_pairing, Point, TwistPoint};
 use crate::u256::{sm9_random_u256, xor, U256};
 use crate::{
-    kdf, SM9_HASH1_PREFIX, SM9_HID_ENC, SM9_HID_SIGN, SM9_N_MINUS_ONE, SM9_POINT_MONT_P1,
+    SM9_HASH1_PREFIX, SM9_HID_ENC, SM9_HID_SIGN, SM9_N_MINUS_ONE, SM9_POINT_MONT_P1,
     SM9_TWIST_POINT_MONT_P2,
 };
 use gm_sm3::sm3_hash;
-use std::error::Error;
 
 #[derive(Copy, Debug, Clone)]
 pub struct Sm9EncKey {
-    ppube: Point,
-    de: TwistPoint,
+    pub ppube: Point,
+    pub de: TwistPoint,
 }
 
 #[derive(Copy, Debug, Clone)]
 pub struct Sm9EncMasterKey {
-    ke: U256,
-    ppube: Point,
+    pub ke: U256,
+    pub ppube: Point,
 }
 
 impl Sm9EncKey {
@@ -26,7 +25,6 @@ impl Sm9EncKey {
         let c1_bytes = &data[0..65];
         let c2 = &data[(65 + 32)..];
         let c3 = &data[65..(65 + 32)];
-
         let c1 = Point::from_bytes(c1_bytes);
         let w = sm9_u256_pairing(&self.de, &c1);
         let w_bytes = w.to_bytes_be();
@@ -75,13 +73,7 @@ impl Sm9EncMasterKey {
         let mut k = vec![];
         loop {
             // A2: rand r in [1, N-1]
-            let mut r = sm9_random_u256(&SM9_N_MINUS_ONE);
-            r = [
-                0xe56ee19cd69ecf13,
-                0x49f2934b18ea8bee,
-                0xd603ab4ff58ec744,
-                0xb640000002a3a6f1,
-            ];
+            let r = sm9_random_u256(&SM9_N_MINUS_ONE);
 
             // A3: C1 = r * Q
             c1 = c1.point_mul(&r);
@@ -200,6 +192,33 @@ fn sm9_u256_hash1(id: &[u8], hid: u8) -> U256 {
     r
 }
 
+fn kdf(z: &[u8], klen: usize) -> Vec<u8> {
+    let mut ct = 0x00000001u32;
+    let bound = ((klen as f64) / 32.0).ceil() as u32;
+    let mut h_a = Vec::new();
+    for _i in 1..bound {
+        let mut prepend = Vec::new();
+        prepend.extend_from_slice(z);
+        prepend.extend_from_slice(&ct.to_be_bytes());
+
+        let h_a_i = sm3_hash(&prepend[..]);
+        h_a.extend_from_slice(&h_a_i);
+        ct += 1;
+    }
+
+    let mut prepend = Vec::new();
+    prepend.extend_from_slice(z);
+    prepend.extend_from_slice(&ct.to_be_bytes());
+
+    let last = sm3_hash(&prepend[..]);
+    if klen % 32 == 0 {
+        h_a.extend_from_slice(&last);
+    } else {
+        h_a.extend_from_slice(&last[0..(klen % 32)]);
+    }
+    h_a
+}
+
 #[derive(Copy, Debug, Clone)]
 pub struct Sm9SignKey {
     ppube: TwistPoint,
@@ -282,8 +301,9 @@ mod sm9_key_test {
         let ret = msk.encrypt(&idb, &data);
         println!("Message =    {:?}", &data);
         println!("Ciphertext = {:?}", ret);
-        let m = r.unwrap().decrypt(&idb, &ret);
-        println!("Plaintext =  {:?}", m.unwrap());
+        let m = r.unwrap().decrypt(&idb, &ret).expect("Decryption failed");
+        println!("Plaintext =  {:?}", &m);
         assert_eq!(true, r.unwrap().de.point_equals(&r_de));
+        assert_eq!(true, data == m.as_slice());
     }
 }

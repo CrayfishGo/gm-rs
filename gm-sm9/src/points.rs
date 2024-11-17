@@ -8,9 +8,9 @@ use crate::SM9_MODP_MONT_ONE;
 
 #[derive(Copy, Debug, Clone)]
 pub struct Point {
-    pub(crate) x: Fp,
-    pub(crate) y: Fp,
-    pub(crate) z: Fp,
+    pub x: Fp,
+    pub y: Fp,
+    pub z: Fp,
 }
 
 impl Point {
@@ -36,9 +36,9 @@ impl Point {
 
 #[derive(Copy, Debug, Clone)]
 pub struct TwistPoint {
-    pub(crate) x: Fp2,
-    pub(crate) y: Fp2,
-    pub(crate) z: Fp2,
+    pub x: Fp2,
+    pub y: Fp2,
+    pub z: Fp2,
 }
 
 impl TwistPoint {
