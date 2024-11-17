@@ -258,13 +258,13 @@ impl Sm9SignKey {
         let mut r: U256 = [0, 0, 0, 0];
         loop {
             // A2: rand r in [1, N-1]
-            // r = sm9_random_u256(&SM9_N_MINUS_ONE);
+            r = sm9_random_u256(&SM9_N_MINUS_ONE);
 
             // only test used
-            r = u256_from_be_bytes(
-                &hex::decode("00033C8616B06704813203DFD00965022ED15975C662337AED648835DC4B1CBE")
-                    .unwrap(),
-            );
+            // r = u256_from_be_bytes(
+            //     &hex::decode("00033C8616B06704813203DFD00965022ED15975C662337AED648835DC4B1CBE")
+            //         .unwrap(),
+            // );
 
             // A3: w = g^r
             let w = g.pow(&r);
