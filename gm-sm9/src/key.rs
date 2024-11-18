@@ -1,7 +1,7 @@
 use crate::error::{Sm9Error, Sm9Result};
 use crate::fields::{mod_n_add, mod_n_from_hash, mod_n_inv, mod_n_mul, mod_n_sub, FieldElement};
 use crate::points::{sm9_u256_pairing, twist_point_add_full, Point, TwistPoint};
-use crate::u256::{sm9_random_u256, u256_cmp, u256_from_be_bytes, xor, U256};
+use crate::u256::{sm9_random_u256, u256_cmp, xor, U256};
 use crate::{
     SM9_HASH1_PREFIX, SM9_HASH2_PREFIX, SM9_HID_ENC, SM9_HID_SIGN, SM9_N_MINUS_ONE,
     SM9_POINT_MONT_P1, SM9_TWIST_POINT_MONT_P2,
@@ -18,6 +18,22 @@ pub struct Sm9EncKey {
 pub struct Sm9EncMasterKey {
     pub ke: U256,
     pub ppube: Point,
+}
+
+pub fn generate_sign_master_key() -> Sm9SignMasterKey {
+    let ks = sm9_random_u256(&SM9_N_MINUS_ONE);
+    Sm9SignMasterKey{
+        ks,
+        ppubs: TwistPoint::g_mul(&ks),
+    }
+}
+
+pub fn generate_enc_master_key() -> Sm9EncMasterKey {
+    let ke = sm9_random_u256(&SM9_N_MINUS_ONE);
+    Sm9EncMasterKey{
+        ke,
+        ppube: Point::g_mul(&ke),
+    }
 }
 
 impl Sm9EncKey {

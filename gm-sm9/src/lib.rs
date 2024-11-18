@@ -2,7 +2,6 @@
 use crate::fields::fp2::Fp2;
 use crate::points::{Point, TwistPoint};
 use crate::u256::U256;
-use gm_sm3::sm3_hash;
 
 pub mod error;
 pub mod fields;
@@ -10,6 +9,7 @@ pub mod key;
 pub mod points;
 mod sm9_p256_table;
 pub mod u256;
+pub mod exchange_key;
 
 /// Example:
 ///
@@ -58,6 +58,51 @@ pub mod u256;
 /// }
 ///
 /// ```
+///
+///
+/// ### sign & verify
+/// ```rust
+///     use gm_sm9::key::{Sm9SignMasterKey, Sm9SignKey};
+///     use gm_sm9::points::{Point, TwistPoint};
+///     use gm_sm9::u256::u256_from_be_bytes;
+///     fn main() {
+///         let data: [u8; 20] = [
+///             0x43, 0x68, 0x69, 0x6E, 0x65, 0x73, 0x65, 0x20, 0x49, 0x42, 0x53, 0x20, 0x73, 0x74,
+///             0x61, 0x6E, 0x64, 0x61, 0x72, 0x64,
+///         ];
+///
+///         let ida = [0x41, 0x6C, 0x69, 0x63, 0x65u8];
+///
+///         let ks = u256_from_be_bytes(
+///             &hex::decode("000130E78459D78545CB54C587E02CF480CE0B66340F319F348A1D5B1F2DC5F4")
+///                 .unwrap(),
+///         );
+///         let msk = Sm9SignMasterKey {
+///             ks,
+///             ppubs: TwistPoint::g_mul(&ks),
+///         };
+///
+///         let r_ds = Point::from_hex([
+///             "A5702F05CF1315305E2D6EB64B0DEB923DB1A0BCF0CAFF90523AC8754AA69820",
+///             "78559A844411F9825C109F5EE3F52D720DD01785392A727BB1556952B2B013D3",
+///         ]);
+///         let r = msk.extract_key(&ida);
+///         let ps = r.unwrap();
+///         assert_eq!(true, ps.ds.point_equals(&r_ds));
+///
+///         println!("Message =    {:?}", &data);
+///         let (h, s) = ps.sign(&data).unwrap();
+///         println!("Sign H =     {:?}", &h);
+///         println!("Sign S =     {:?}", &s);
+///
+///         let r = msk.verify_sign(&ida, &data, &h, &s);
+///         println!("VersionSign ={:?}", &r);
+///     }
+///
+/// ```
+///
+///
+///
 ///
 
 
