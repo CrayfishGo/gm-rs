@@ -1,4 +1,3 @@
-use crate::fields::FieldElement;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use rand::RngCore;
 use std::io::Cursor;
@@ -8,8 +7,6 @@ pub type U512 = [u64; 8];
 
 pub(crate) const SM9_ZERO: U256 = [0, 0, 0, 0];
 pub(crate) const SM9_ONE: U256 = [1, 0, 0, 0];
-pub(crate) const SM9_TWO: U256 = [2, 0, 0, 0];
-pub(crate) const SM9_FIVE: U256 = [5, 0, 0, 0];
 
 #[inline(always)]
 pub fn sm9_random_u256(range: &U256) -> U256 {
@@ -123,10 +120,10 @@ pub const fn u256_cmp(a: &U256, b: &U256) -> i32 {
     if a[2] > b[2] {
         return 1;
     }
-    if (a[2] < b[2]) {
+    if a[2] < b[2] {
         return -1;
     }
-    if (a[1] > b[1]) {
+    if a[1] > b[1] {
         return 1;
     }
     if a[1] < b[1] {
@@ -208,6 +205,11 @@ pub fn u256_to_bits(a: U256) -> [char; 256] {
         }
     }
     bits
+}
+
+#[inline(always)]
+pub fn u256_from_hex(hex: &str) -> U256 {
+    u256_from_be_bytes(&hex::decode(hex).unwrap())
 }
 
 #[inline(always)]

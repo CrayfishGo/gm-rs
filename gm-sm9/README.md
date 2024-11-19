@@ -93,3 +93,29 @@ fn main() {
     }
 
 ```
+
+### key exchange
+```rust
+    use gm_sm9::key::{Sm9EncMasterKey,Sm9EncKey};
+    use gm_sm9::points::{Point, TwistPoint};
+    fn main() {
+        let msk: Sm9EncMasterKey = Sm9EncMasterKey::master_key_generate();
+        let klen = 20usize;
+        let ida = [0x41, 0x6C, 0x69, 0x63, 0x65u8];
+        let idb = [0x42, 0x6F, 0x62u8];
+        let key_a: Sm9EncKey = msk.extract_exch_key(&ida).unwrap();
+        let key_b: Sm9EncKey = msk.extract_exch_key(&idb).unwrap();
+
+        let (ra, ra_) = exch_step_1a(&msk, &idb);
+        let (rb, skb) = exch_step_1b(&msk, &ida, &idb, &key_b, &ra, klen).unwrap();
+        let ska = exch_step_2a(&msk, &ida, &idb, &key_a, ra_, &ra, &rb, klen).unwrap();
+        println!("SKB = {:?}", &skb);
+        println!("SKA = {:?}", &ska);
+        for i in 0..klen {
+            if ska[i] != skb[i] {
+                println!("Exchange key different at byte index: {}", i)
+            }
+        }
+    }
+
+```

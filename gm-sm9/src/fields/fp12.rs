@@ -202,22 +202,16 @@ impl FieldElement for Fp12 {
     }
 
     fn fp_sqr(&self) -> Self {
-        let mut r0 = Fp4::zero();
-        let mut r1 = Fp4::zero();
         let mut r2 = Fp4::zero();
-        let mut t = Fp4::zero();
-
-        let mut s0 = Fp4::zero();
-        let mut s1 = Fp4::zero();
         let mut s2 = Fp4::zero();
         let mut s3 = Fp4::zero();
 
-        r0 = self.c0.fp_sqr();
-        r1 = self.c2.fp_sqr();
-        s0 = self.c2.fp_add(&self.c0);
+        let mut r0 = self.c0.fp_sqr();
+        let mut r1 = self.c2.fp_sqr();
+        let mut s0 = self.c2.fp_add(&self.c0);
 
-        t = s0.fp_sub(&self.c1);
-        s1 = t.fp_sqr();
+        let mut t = s0.fp_sub(&self.c1);
+        let s1 = t.fp_sqr();
 
         t = s0.fp_add(&self.c1);
         s0 = t.fp_sqr();

@@ -3,7 +3,7 @@ use crate::fields::{mod_n_add, mod_n_from_hash, mod_n_inv, mod_n_mul, mod_n_sub,
 use crate::points::{sm9_u256_pairing, twist_point_add_full, Point, TwistPoint};
 use crate::u256::{sm9_random_u256, u256_cmp, xor, U256};
 use crate::{
-    SM9_HASH1_PREFIX, SM9_HASH2_PREFIX, SM9_HID_ENC, SM9_HID_SIGN, SM9_N_MINUS_ONE,
+    SM9_HASH1_PREFIX, SM9_HASH2_PREFIX, SM9_HID_ENC, SM9_HID_EXCH, SM9_HID_SIGN, SM9_N_MINUS_ONE,
     SM9_POINT_MONT_P1, SM9_TWIST_POINT_MONT_P2,
 };
 use gm_sm3::sm3_hash;
@@ -22,7 +22,7 @@ pub struct Sm9EncMasterKey {
 
 pub fn generate_sign_master_key() -> Sm9SignMasterKey {
     let ks = sm9_random_u256(&SM9_N_MINUS_ONE);
-    Sm9SignMasterKey{
+    Sm9SignMasterKey {
         ks,
         ppubs: TwistPoint::g_mul(&ks),
     }
@@ -30,7 +30,7 @@ pub fn generate_sign_master_key() -> Sm9SignMasterKey {
 
 pub fn generate_enc_master_key() -> Sm9EncMasterKey {
     let ke = sm9_random_u256(&SM9_N_MINUS_ONE);
-    Sm9EncMasterKey{
+    Sm9EncMasterKey {
         ke,
         ppube: Point::g_mul(&ke),
     }
@@ -131,9 +131,27 @@ impl Sm9EncMasterKey {
         c
     }
 
-    pub fn extract_key(&self, idb: &[u8]) -> Option<Sm9EncKey> {
+    pub fn extract_key(&self, id: &[u8]) -> Option<Sm9EncKey> {
         // t1 = H1(ID || hid, N) + ke
-        let mut t = sm9_u256_hash1(idb, SM9_HID_ENC);
+        let mut t = sm9_u256_hash1(id, SM9_HID_ENC);
+        t = mod_n_add(&t, &self.ke);
+        if t.is_zero() {
+            return None;
+        }
+        // t2 = ks * t1^-1
+        t = mod_n_inv(&t);
+
+        // ds = t2 * P1
+        t = mod_n_mul(&t, &self.ke);
+        Some(Sm9EncKey {
+            ppube: self.ppube,
+            de: TwistPoint::g_mul(&t),
+        })
+    }
+
+    pub fn extract_exch_key(&self, id: &[u8]) -> Option<Sm9EncKey> {
+        // t1 = H1(ID || hid, N) + ke
+        let mut t = sm9_u256_hash1(id, SM9_HID_EXCH);
         t = mod_n_add(&t, &self.ke);
         if t.is_zero() {
             return None;
@@ -276,12 +294,6 @@ impl Sm9SignKey {
             // A2: rand r in [1, N-1]
             r = sm9_random_u256(&SM9_N_MINUS_ONE);
 
-            // only test used
-            // r = u256_from_be_bytes(
-            //     &hex::decode("00033C8616B06704813203DFD00965022ED15975C662337AED648835DC4B1CBE")
-            //         .unwrap(),
-            // );
-
             // A3: w = g^r
             let w = g.pow(&r);
             let wbuf = w.to_bytes_be();
@@ -360,9 +372,149 @@ impl Sm9SignMasterKey {
     }
 }
 
+pub fn exch_step_1a(msk: &Sm9EncMasterKey, idb: &[u8]) -> (Point, U256) {
+    // A1: Q = H1(ID_B||hid,N) * P1 + Ppube
+    let mut ra = sm9_u256_hash1(idb, SM9_HID_EXCH);
+    let mut r = SM9_POINT_MONT_P1.point_mul(&ra);
+    r = r.point_add(&msk.ppube);
+
+    // A2: rand rA in [1, N-1]
+    ra = sm9_random_u256(&SM9_N_MINUS_ONE);
+    // ra = u256_from_hex("00005879DD1D51E175946F23B1B41E93BA31C584AE59A426EC1046A4D03B06C8");
+
+    // A3: RA = rA * Q
+    r = r.point_mul(&ra);
+
+    (r, ra)
+}
+
+pub fn exch_step_1b(
+    msk: &Sm9EncMasterKey,
+    ida: &[u8],
+    idb: &[u8],
+    key: &Sm9EncKey,
+    ra: &Point,
+    klen: usize,
+) -> Sm9Result<(Point, Vec<u8>)> {
+    // B1: Q = H1(ID_A||hid,N) * P1 + Ppube
+    let mut rb = sm9_u256_hash1(ida, SM9_HID_EXCH);
+    let mut r = SM9_POINT_MONT_P1.point_mul(&rb);
+    r = r.point_add(&msk.ppube);
+    let mut sk = vec![];
+    loop {
+        // B2: rand rB in [1, N-1]
+        rb = sm9_random_u256(&SM9_N_MINUS_ONE);
+
+        // rb = u256_from_hex("00018B98C44BEF9F8537FB7D071B2C928B3BC65BD3D69E1EEE213564905634FE");
+
+        // B3: RB = rB * Q
+        r = r.point_mul(&rb);
+
+        // B4: check RA on curve; G1 = e(RA, deB), G2 = e(Ppube, P2) ^ rB, G3 = G1 ^ rB
+        if !ra.is_on_curve() {
+            return Err(Sm9Error::InvalidPoint);
+        }
+
+        let g1 = sm9_u256_pairing(&key.de, &ra);
+        let mut g2 = sm9_u256_pairing(&SM9_TWIST_POINT_MONT_P2, &msk.ppube);
+        g2 = g2.pow(&rb);
+        let g3 = g1.pow(&rb);
+        let ta = ra.to_bytes_be();
+        let tb = r.to_bytes_be();
+
+        let g1 = g1.to_bytes_be();
+        let g2 = g2.to_bytes_be();
+        let g3 = g3.to_bytes_be();
+
+        let mut pre_append = vec![];
+        pre_append.extend_from_slice(ida);
+        pre_append.extend_from_slice(idb);
+        pre_append.extend_from_slice(&ta[1..]);
+        pre_append.extend_from_slice(&tb[1..]);
+        pre_append.extend_from_slice(&g1);
+        pre_append.extend_from_slice(&g2);
+        pre_append.extend_from_slice(&g3);
+
+        sk = kdf(&pre_append, klen);
+
+        fn is_zero(x: &Vec<u8>, klen: usize) -> bool {
+            let mut ret = true;
+            for i in 0..klen {
+                if x[i] != 0 {
+                    ret = false;
+                }
+            }
+            ret
+        }
+
+        if !is_zero(&sk, klen) {
+            break;
+        }
+    }
+    Ok((r, sk))
+}
+
+pub fn exch_step_2a(
+    msk: &Sm9EncMasterKey,
+    ida: &[u8],
+    idb: &[u8],
+    key: &Sm9EncKey,
+    ra_: U256,
+    ra: &Point,
+    rb: &Point,
+    klen: usize,
+) -> Sm9Result<Vec<u8>> {
+    let mut sk = vec![];
+    loop {
+        if !rb.is_on_curve() {
+            return Err(Sm9Error::InvalidPoint);
+        }
+
+        let mut g1 = sm9_u256_pairing(&SM9_TWIST_POINT_MONT_P2, &msk.ppube);
+        g1 = g1.pow(&ra_);
+
+        let g2 = sm9_u256_pairing(&key.de, &rb);
+        let g3 = g2.pow(&ra_);
+
+        let ta = ra.to_bytes_be();
+        let tb = rb.to_bytes_be();
+
+        let g1 = g1.to_bytes_be();
+        let g2 = g2.to_bytes_be();
+        let g3 = g3.to_bytes_be();
+
+        let mut pre_append = vec![];
+        pre_append.extend_from_slice(ida);
+        pre_append.extend_from_slice(idb);
+        pre_append.extend_from_slice(&ta[1..]);
+        pre_append.extend_from_slice(&tb[1..]);
+        pre_append.extend_from_slice(&g1);
+        pre_append.extend_from_slice(&g2);
+        pre_append.extend_from_slice(&g3);
+
+        sk = kdf(&pre_append, klen);
+        fn is_zero(x: &Vec<u8>, klen: usize) -> bool {
+            let mut ret = true;
+            for i in 0..klen {
+                if x[i] != 0 {
+                    ret = false;
+                }
+            }
+            ret
+        }
+
+        if !is_zero(&sk, klen) {
+            break;
+        }
+    }
+    Ok(sk)
+}
+
 #[cfg(test)]
 mod sm9_key_test {
-    use crate::key::{Sm9EncMasterKey, Sm9SignMasterKey};
+    use crate::key::{
+        exch_step_1a, exch_step_1b, exch_step_2a, Sm9EncKey, Sm9EncMasterKey, Sm9SignMasterKey,
+    };
     use crate::points::{Point, TwistPoint};
     use crate::u256::u256_from_be_bytes;
 
@@ -439,5 +591,34 @@ mod sm9_key_test {
 
         let r = msk.verify_sign(&ida, &data, &h, &s);
         println!("VersionSign ={:?}", &r);
+    }
+
+    #[test]
+    fn test_exchange_key() {
+        // let ke = u256_from_be_bytes(
+        //     &hex::decode("0002E65B0762D042F51F0D23542B13ED8CFA2E9A0E7206361E013A283905E31F")
+        //         .unwrap(),
+        // );
+        // let msk = Sm9EncMasterKey {
+        //     ke,
+        //     ppube: Point::g_mul(&ke),
+        // };
+        let msk: Sm9EncMasterKey = Sm9EncMasterKey::master_key_generate();
+        let klen = 20usize;
+        let ida = [0x41, 0x6C, 0x69, 0x63, 0x65u8];
+        let idb = [0x42, 0x6F, 0x62u8];
+        let key_a: Sm9EncKey = msk.extract_exch_key(&ida).unwrap();
+        let key_b: Sm9EncKey = msk.extract_exch_key(&idb).unwrap();
+
+        let (ra, ra_) = exch_step_1a(&msk, &idb);
+        let (rb, skb) = exch_step_1b(&msk, &ida, &idb, &key_b, &ra, klen).unwrap();
+        let ska = exch_step_2a(&msk, &ida, &idb, &key_a, ra_, &ra, &rb, klen).unwrap();
+        println!("SKB = {:?}", &skb);
+        println!("SKA = {:?}", &ska);
+        for i in 0..klen {
+            if ska[i] != skb[i] {
+                println!("Exchange key different at byte index: {}", i)
+            }
+        }
     }
 }

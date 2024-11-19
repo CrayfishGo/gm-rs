@@ -1,4 +1,4 @@
-use crate::fields::fp::{fp_from_hex, fp_from_mont, Fp};
+use crate::fields::fp::{fp_from_hex, Fp};
 use crate::fields::FieldElement;
 
 #[derive(Debug, Copy, Clone)]

@@ -50,7 +50,6 @@ pub fn fp_from_mont(a: &Fp) -> Fp {
     mont_mul(a, &SM9_ONE)
 }
 
-
 pub(crate) fn fp_from_bytes(buf: &[u8]) -> Fp {
     let mut t = u256_from_be_bytes(buf);
     t = fp_to_mont(&t);
@@ -60,11 +59,10 @@ pub(crate) fn fp_from_bytes(buf: &[u8]) -> Fp {
 pub fn mont_mul(a: &Fp, b: &Fp) -> Fp {
     let mut r = [0u64; 4];
 
-    let mut z = [0u64; 8];
     let mut t = [0u64; 8];
 
     // z = a * b
-    z = u256_mul(a, b);
+    let mut z = u256_mul(a, b);
 
     // t = low(z) * p'
     let z_low = [z[0], z[1], z[2], z[3]];
@@ -205,13 +203,6 @@ mod test_mod_operation {
             0x1006E85F5CDFF073,
             0x1A7CE027B7A46F74,
             0x41E00A53DDA532DA,
-        ];
-
-        let p: [u64; 4] = [
-            0xe56f9b27e351457d,
-            0x21f2934b1a7aeedb,
-            0xd603ab4ff58ec745,
-            0xb640000002a3a6f1,
         ];
 
         let r = a.fp_add(&b);

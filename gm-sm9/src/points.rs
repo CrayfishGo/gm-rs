@@ -4,7 +4,7 @@ use crate::fields::fp2::Fp2;
 use crate::fields::FieldElement;
 use crate::sm9_p256_table::SM9_P256_PRECOMPUTED;
 use crate::u256::{sm9_u256_get_booth, u256_cmp, u256_to_bits, SM9_ZERO, U256};
-use crate::SM9_MODP_MONT_ONE;
+use crate::{SM9_MODP_MONT_FIVE, SM9_MODP_MONT_ONE};
 
 #[derive(Copy, Debug, Clone)]
 pub struct Point {
@@ -31,6 +31,26 @@ impl Point {
         ppend.extend_from_slice(&p.x.to_bytes_be());
         ppend.extend_from_slice(&p.y.to_bytes_be());
         ppend
+    }
+
+    pub fn is_on_curve(&self) -> bool {
+        let (mut t0, mut t1, mut t2) = (Fp::zero(), Fp::zero(), Fp::zero());
+        if u256_cmp(&self.z, &SM9_MODP_MONT_ONE) == 0 {
+            t0 = self.y.fp_sqr();
+            t1 = self.x.fp_sqr();
+            t1 = t1.fp_mul(&self.x);
+            t1 = t1.fp_add(&SM9_MODP_MONT_FIVE);
+        } else {
+            t0 = self.x.fp_sqr();
+            t0 = t0.fp_mul(&self.x);
+            t1 = self.z.fp_sqr();
+            t2 = t1.fp_sqr();
+            t1 = t1.fp_mul(&t2);
+            t1 = t1.fp_mul(&SM9_MODP_MONT_FIVE);
+            t1 = t0.fp_add(&t1);
+            t0 = self.y.fp_sqr();
+        }
+        u256_cmp(&t0, &t1) == 0
     }
 }
 
