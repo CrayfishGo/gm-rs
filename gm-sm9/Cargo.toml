@@ -33,3 +33,21 @@ hex-literal = "0.3"
 [[bench]]
 name = "sm9"
 harness = false
+
+
+[dependencies.pkcs8]
+version = "0.10.2"
+features = ["alloc", "pem"]
+default-features = false
+
+[dependencies.sec1]
+version = "0.7.3"
+features = [
+    "subtle",
+    "zeroize",
+]
+optional = true
+
+
+[features]
+default = ["sec1"]

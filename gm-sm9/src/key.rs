@@ -7,6 +7,20 @@ use crate::{
     SM9_POINT_MONT_P1, SM9_TWIST_POINT_MONT_P2,
 };
 use gm_sm3::sm3_hash;
+use pkcs8::spki::AlgorithmIdentifier;
+use pkcs8::ObjectIdentifier;
+
+pub const OID_SM9: ObjectIdentifier = ObjectIdentifier::new_unwrap("1.2.156.10197.1.302");
+pub const OID_SM9_SIGN: ObjectIdentifier = ObjectIdentifier::new_unwrap("1.2.156.10197.1.302.1");
+pub const OID_SM9_EXCH: ObjectIdentifier = ObjectIdentifier::new_unwrap("1.2.156.10197.1.302.2");
+pub const OID_SM9_ENC: ObjectIdentifier = ObjectIdentifier::new_unwrap("1.2.156.10197.1.302.3");
+
+pub const ALGORITHM_OID: ObjectIdentifier = ObjectIdentifier::new_unwrap("1.2.840.10045.2.1");
+pub const ALGORITHM_IDENTIFIER: AlgorithmIdentifier<ObjectIdentifier> = AlgorithmIdentifier {
+    oid: ALGORITHM_OID,
+    parameters: Some(OID_SM9),
+};
+
 
 #[derive(Copy, Debug, Clone)]
 pub struct Sm9EncKey {
