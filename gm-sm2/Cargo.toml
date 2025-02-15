@@ -16,11 +16,8 @@ documentation = "https://docs.rs/gm-sm2/"
 [dependencies]
 byteorder = "1.0.0"
 rand = "0.8.4"
-lazy_static = "1.4.0"
-base64 = "0.21.0"
 hex = "0.4"
 num-traits = "0.2.14"
-num-integer = "0.1.44"
 gm-sm3 = { version = "0.10.0", path = "../gm-sm3" }
 num-bigint = "0.4.4"
 yasna = { version = "0.5.2", features = ["num-bigint"] }

@@ -21,7 +21,6 @@ pub const ALGORITHM_IDENTIFIER: AlgorithmIdentifier<ObjectIdentifier> = Algorith
     parameters: Some(OID_SM9),
 };
 
-
 #[derive(Copy, Debug, Clone)]
 pub struct Sm9EncKey {
     pub ppube: Point,
@@ -85,6 +84,13 @@ impl Sm9EncKey {
 }
 
 impl Sm9EncMasterKey {
+    pub fn from_special_key(ke: U256) -> Sm9EncMasterKey {
+        Self {
+            ke,
+            ppube: Point::g_mul(&ke),
+        }
+    }
+
     pub fn master_key_generate() -> Sm9EncMasterKey {
         // k = rand(1, n-1)
         let ke = sm9_random_u256(&SM9_N_MINUS_ONE);
@@ -338,6 +344,13 @@ pub struct Sm9SignMasterKey {
 }
 
 impl Sm9SignMasterKey {
+    pub fn from_special_key(ks: U256) -> Sm9SignMasterKey {
+        Self {
+            ks,
+            ppubs: TwistPoint::g_mul(&ks),
+        }
+    }
+
     pub fn master_key_generate() -> Self {
         // k = rand(1, n-1)
         let ks = sm9_random_u256(&SM9_N_MINUS_ONE);
