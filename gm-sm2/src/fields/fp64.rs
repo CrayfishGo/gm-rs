@@ -152,7 +152,7 @@ pub(crate) fn mont_mul(a: &U256, b: &U256) -> U256 {
     let (sum, c) = u512_add(&z, &t);
     z = sum;
 
-    // r = high(r)
+    // r = high(z)
     r = [z[4], z[5], z[6], z[7]];
     if c {
         r = u256_add(&r, &SM2_MODP_MONT_ONE).0;
