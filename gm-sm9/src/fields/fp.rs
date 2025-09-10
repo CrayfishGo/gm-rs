@@ -80,7 +80,7 @@ pub fn mont_mul(a: &Fp, b: &Fp) -> Fp {
     let (sum, c) = u512_add(&z, &t);
     z = sum;
 
-    // r = high(r)
+    // r = high(z)
     r = [z[4], z[5], z[6], z[7]];
     if c {
         r = u256_add(&r, &SM9_MODP_MONT_ONE).0;
